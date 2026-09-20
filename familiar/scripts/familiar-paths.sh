@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Shared Familiar naming and storage configuration.
+# Shared Familiar storage, naming, and path derivation.
 #
-# Source this file from the Familiar scripts. It is also executable so a
-# summoning agent can ask it for paths before summoning a Familiar.
+# This is the source of truth for the Familiar home, the antechamber, the
+# YYMMDD-HHMM naming convention, bare-name validation, and request/response/
+# session path derivation. Source it from the other Familiar scripts, or run it
+# directly so a summoning agent can ask for a path before summoning a Familiar.
+# The --request-path query also creates the antechamber directory, so the agent
+# can write the returned path without preparing any directory itself.
 
 familiar_storage_directory() {
   local directory=${FAMILIAR_HOME:-}
@@ -101,7 +105,7 @@ familiar_response_path() {
   familiar_path_in_storage "$(familiar_response_filename "$1" "$2")"
 }
 
-familiar_config_usage() {
+familiar_paths_usage() {
   printf '%s\n' \
     "Usage: ${0##*/} --directory" \
     "       ${0##*/} --antechamber-directory" \
@@ -110,12 +114,12 @@ familiar_config_usage() {
     "       ${0##*/} --response-path --name <bare-familiar-name>" >&2
 }
 
-familiar_config_fail() {
+familiar_paths_fail() {
   printf '%s\n' "$*" >&2
   exit 1
 }
 
-familiar_config_main() {
+familiar_paths_main() {
   set -euo pipefail
 
   local output_kind=''
@@ -124,38 +128,38 @@ familiar_config_main() {
   while (($#)); do
     case "$1" in
       --directory|--antechamber-directory|--session-name|--request-path|--response-path)
-        [[ -z $output_kind ]] || familiar_config_fail 'Choose one output option.'
+        [[ -z $output_kind ]] || familiar_paths_fail 'Choose one output option.'
         output_kind=$1
         shift
         ;;
       --name)
-        (($# >= 2)) || familiar_config_fail 'Missing value for --name'
-        [[ -z $familiar_name ]] || familiar_config_fail '--name may be specified once'
+        (($# >= 2)) || familiar_paths_fail 'Missing value for --name'
+        [[ -z $familiar_name ]] || familiar_paths_fail '--name may be specified once'
         familiar_name=$2
         shift 2
         ;;
       --help)
-        familiar_config_usage
+        familiar_paths_usage
         exit 0
         ;;
       *)
-        familiar_config_usage
-        familiar_config_fail "Unknown option: $1"
+        familiar_paths_usage
+        familiar_paths_fail "Unknown option: $1"
         ;;
     esac
   done
 
   [[ -n $output_kind ]] || {
-    familiar_config_usage
-    familiar_config_fail 'An output option is required.'
+    familiar_paths_usage
+    familiar_paths_fail 'An output option is required.'
   }
 
   local storage_directory
-  storage_directory=$(familiar_storage_directory) || familiar_config_fail 'HOME must be set when FAMILIAR_HOME is not set.'
-  familiar_validate_storage_directory "$storage_directory" || familiar_config_fail 'FAMILIAR_HOME must be an absolute path.'
+  storage_directory=$(familiar_storage_directory) || familiar_paths_fail 'HOME must be set when FAMILIAR_HOME is not set.'
+  familiar_validate_storage_directory "$storage_directory" || familiar_paths_fail 'FAMILIAR_HOME must be an absolute path.'
 
   if [[ $output_kind == '--directory' || $output_kind == '--antechamber-directory' ]]; then
-    [[ -z $familiar_name ]] || familiar_config_fail '--name is not used with directory output options'
+    [[ -z $familiar_name ]] || familiar_paths_fail '--name is not used with directory output options'
     if [[ $output_kind == '--directory' ]]; then
       printf '%s\n' "$storage_directory"
     else
@@ -164,8 +168,8 @@ familiar_config_main() {
     return
   fi
 
-  [[ -n $familiar_name ]] || familiar_config_fail "${output_kind} requires --name <bare-familiar-name>"
-  familiar_validate_name "$familiar_name" || familiar_config_fail 'Familiar name must be lowercase kebab-case without an fm, fmrq, or fmrs prefix.'
+  [[ -n $familiar_name ]] || familiar_paths_fail "${output_kind} requires --name <bare-familiar-name>"
+  familiar_validate_name "$familiar_name" || familiar_paths_fail 'Familiar name must be lowercase kebab-case without an fm, fmrq, or fmrs prefix.'
 
   local familiar_timestamp
   familiar_timestamp=$(familiar_current_timestamp)
@@ -174,6 +178,9 @@ familiar_config_main() {
       familiar_session_name "$familiar_timestamp" "$familiar_name"
       ;;
     --request-path)
+      local antechamber_directory
+      antechamber_directory=$(familiar_antechamber_directory) || familiar_paths_fail 'Could not resolve the antechamber directory.'
+      mkdir -p -- "$antechamber_directory" || familiar_paths_fail "Could not create the antechamber directory: $antechamber_directory"
       familiar_staged_request_path "$familiar_name"
       ;;
     --response-path)
@@ -183,5 +190,5 @@ familiar_config_main() {
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
-  familiar_config_main "$@"
+  familiar_paths_main "$@"
 fi

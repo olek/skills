@@ -3,9 +3,11 @@ set -euo pipefail
 
 SKILL_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 readonly SKILL_ROOT
-readonly CONFIG="$SKILL_ROOT/scripts/familiar-config.sh"
+readonly CONFIG="$SKILL_ROOT/scripts/familiar-paths.sh"
 readonly LAUNCHER="$SKILL_ROOT/scripts/summon-familiar.sh"
 readonly STATUS="$SKILL_ROOT/scripts/familiar-status.sh"
+readonly MODELS="$SKILL_ROOT/scripts/familiar-models.sh"
+readonly HARNESS_LOADER="$SKILL_ROOT/scripts/familiar-harness.sh"
 TEST_ROOT=$(mktemp -d)
 readonly TEST_ROOT
 readonly FAKE_BIN="$TEST_ROOT/bin"
@@ -191,6 +193,12 @@ run_status() {
     "$STATUS" "$@"
 }
 
+run_models() {
+  env \
+    PATH="$FAKE_BIN:$PATH" \
+    "$MODELS" "$@"
+}
+
 request_path_for() {
   run_config --request-path --name "$1"
 }
@@ -216,6 +224,58 @@ reset_fake_tmux() {
   : > "$FAKE_TMUX_LIST_COUNT"
 }
 
+discovered_harnesses=$(bash -c 'source "$1"; familiar_harness_all' -- "$HARNESS_LOADER")
+assert_contains "$discovered_harnesses" 'codex'
+assert_contains "$discovered_harnesses" 'claude'
+
+unknown_dispatch_output=''
+if unknown_dispatch_output=$(bash -c 'source "$1"; familiar_harness_executable "$2"' -- "$HARNESS_LOADER" unknown 2>&1); then
+  fail_test 'expected an unknown harness dispatch to fail'
+fi
+assert_contains "$unknown_dispatch_output" 'Unknown Familiar harness: unknown'
+
+harness_copy="$TEST_ROOT/harness-copy"
+mkdir -p -- "$harness_copy/harnesses"
+cp -- "$HARNESS_LOADER" "$harness_copy/familiar-harness.sh"
+cp -- "$SKILL_ROOT/scripts/harnesses/codex.sh" "$harness_copy/harnesses/codex.sh"
+cp -- "$SKILL_ROOT/scripts/harnesses/claude.sh" "$harness_copy/harnesses/claude.sh"
+cat > "$harness_copy/harnesses/scratch.sh" <<'SCRATCH_HARNESS'
+#!/usr/bin/env bash
+
+familiar_harness_scratch_executable() {
+  printf 'scratch\n'
+}
+SCRATCH_HARNESS
+scratch_harnesses=$(bash -c 'source "$1"; familiar_harness_all' -- "$harness_copy/familiar-harness.sh")
+assert_contains "$scratch_harnesses" 'scratch'
+
+codex_models=$(run_models --harness codex)
+assert_contains "$codex_models" 'gpt-5.6-luna'
+codex_efforts=$(run_models --harness codex --efforts)
+assert_contains "$codex_efforts" 'ultra'
+codex_planning_intent=$(run_models --harness codex --intent planning)
+assert_contains "$codex_planning_intent" 'model: gpt-5.6-sol'
+assert_contains "$codex_planning_intent" 'effort: medium'
+claude_models=$(run_models --harness claude)
+assert_contains "$claude_models" 'sonnet'
+claude_efforts=$(run_models --harness claude --efforts)
+assert_not_contains "$claude_efforts" 'ultra'
+codex_implementation_intent=$(run_models --harness codex --intent implementation)
+assert_contains "$codex_implementation_intent" 'model: gpt-5.6-terra'
+assert_contains "$codex_implementation_intent" 'effort: medium'
+codex_review_intent=$(run_models --harness codex --intent review)
+assert_contains "$codex_review_intent" 'model: gpt-5.6-sol'
+assert_contains "$codex_review_intent" 'effort: medium'
+claude_planning_intent=$(run_models --harness claude --intent planning)
+assert_contains "$claude_planning_intent" 'model: opus'
+assert_contains "$claude_planning_intent" 'effort: medium'
+claude_implementation_intent=$(run_models --harness claude --intent implementation)
+assert_contains "$claude_implementation_intent" 'model: sonnet'
+assert_contains "$claude_implementation_intent" 'effort: high'
+claude_review_intent=$(run_models --harness claude --intent review)
+assert_contains "$claude_review_intent" 'model: opus'
+assert_contains "$claude_review_intent" 'effort: medium'
+
 # A managed Familiar pane's metadata, one row per pane:
 #   pane_id  familiar  bare_name  timestamp  harness  storage  summoner  pane_dead
 write_pane() {
@@ -237,6 +297,16 @@ assert_equals "$default_response" "$DEFAULT_STORAGE/$TIMESTAMP-fmrs-$default_nam
 assert_file_not_contains "$default_request" "$default_response"
 assert_file_not_contains "$default_request" 'completion-delivery contract'
 assert_equals "$(run_config --session-name --name '260918-task')" "$TIMESTAMP-fm-260918-task"
+
+# --request-path creates the antechamber directory so the summoning agent need not.
+fresh_home="$TEST_ROOT/fresh-home"
+fresh_antechamber="$fresh_home/antechamber"
+[[ ! -e $fresh_antechamber ]] || fail_test 'expected the fresh antechamber to be absent before --request-path'
+FAMILIAR_HOME="$fresh_home"
+fresh_request=$(run_config --request-path --name fresh-antechamber)
+FAMILIAR_HOME=''
+assert_equals "$fresh_request" "$fresh_antechamber/fresh-antechamber.md"
+[[ -d $fresh_antechamber ]] || fail_test 'expected --request-path to create the antechamber directory'
 
 FAMILIAR_HOME="$OVERRIDE_STORAGE"
 override_name='environment-override'
@@ -260,7 +330,7 @@ assert_contains "$override_launch_output" "response: $override_response"
 
 FAMILIAR_HOME=''
 reset_fake_tmux
-default_launch_output=$(run_launcher --name "$default_name" --cwd "$work_directory")
+default_launch_output=$(run_launcher --name "$default_name" --cwd "$work_directory" --harness codex)
 default_command=$(tail -n 1 "$FAKE_TMUX_SPLIT_ARGS")
 expected_prompt="Read and follow the request at $default_timestamped_request. The resolved response path is $default_response. Work only within its stated scope. Do not create $default_response until the result is complete; then write the complete result there in a single write and state completion in this Familiar session. You may delegate read-only work (research, reading, checks) to headless sub-agents (cheaper models are fine), but make every file change yourself."
 assert_contains "$default_command" 'exec codex --no-alt-screen --approve-for-me'
@@ -286,21 +356,21 @@ assert_contains "$default_launch_output" "response: $default_response"
 codex_name='codex-model-selection'
 create_request "$codex_name" "$DEFAULT_STORAGE" >/dev/null
 reset_fake_tmux
-run_launcher --name "$codex_name" --cwd "$work_directory" --harness codex --model "gpt model's id" --effort high >/dev/null
+run_launcher --name "$codex_name" --cwd "$work_directory" --harness codex --model gpt-5.6-luna --effort high >/dev/null
 codex_command=$(tail -n 1 "$FAKE_TMUX_SPLIT_ARGS")
-assert_contains "$codex_command" "--model $(shell_quote "gpt model's id")"
+assert_contains "$codex_command" "--model $(shell_quote gpt-5.6-luna)"
 assert_contains "$codex_command" "--config $(shell_quote 'model_reasoning_effort=high')"
 assert_file_contains "$FAKE_TMUX_OPTIONS" $'@familiar_harness\tcodex'
 
 claude_name='claude-model-selection'
 create_request "$claude_name" "$DEFAULT_STORAGE" >/dev/null
 reset_fake_tmux
-run_launcher --name "$claude_name" --cwd "$work_directory" --harness claude --model "claude model's id" --effort xhigh >/dev/null
+run_launcher --name "$claude_name" --cwd "$work_directory" --harness claude --model sonnet --effort xhigh >/dev/null
 claude_command=$(tail -n 1 "$FAKE_TMUX_SPLIT_ARGS")
 assert_contains "$claude_command" 'CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1'
 assert_contains "$claude_command" 'exec claude --permission-mode auto'
 assert_contains "$claude_command" "--name $(shell_quote "$TIMESTAMP-fm-$claude_name")"
-assert_contains "$claude_command" "--model $(shell_quote "claude model's id")"
+assert_contains "$claude_command" "--model $(shell_quote sonnet)"
 assert_contains "$claude_command" "--effort $(shell_quote xhigh)"
 assert_not_contains "$claude_command" 'codex'
 assert_not_contains "$claude_command" '--approve-for-me'
@@ -321,7 +391,7 @@ for invalid_name in \
   'name with spaces'; do
   invalid_name_case=$((invalid_name_case + 1))
   reset_fake_tmux
-  if run_launcher --name "$invalid_name" --cwd "$work_directory" >/dev/null 2>&1; then
+  if run_launcher --name "$invalid_name" --cwd "$work_directory" --harness codex >/dev/null 2>&1; then
     fail_test "expected launcher failure for invalid name: $invalid_name"
   fi
   assert_no_split
@@ -352,6 +422,12 @@ fi
 assert_no_split
 
 reset_fake_tmux
+if run_launcher --name 'absent-harness' --cwd "$work_directory" >/dev/null 2>&1; then
+  fail_test 'expected an omitted --harness to fail'
+fi
+assert_no_split
+
+reset_fake_tmux
 if run_launcher --name 'invalid-effort' --cwd "$work_directory" --harness claude --effort ultra >/dev/null 2>&1; then
   fail_test 'expected unsupported Claude effort to fail'
 fi
@@ -361,14 +437,14 @@ other_summoner_name='other-summoner-allowed'
 create_request "$other_summoner_name" "$DEFAULT_STORAGE" >/dev/null
 reset_fake_tmux
 write_pane '%2' '1' 'other-summoner-familiar' "$TIMESTAMP" codex "$DEFAULT_STORAGE" '%99' '0'
-run_launcher --name "$other_summoner_name" --cwd "$work_directory" >/dev/null
+run_launcher --name "$other_summoner_name" --cwd "$work_directory" --harness codex >/dev/null
 assert_file_contains "$FAKE_TMUX_CALLS" 'split-window'
 
 guard_name='guarded-launch'
 guard_request=$(create_request "$guard_name" "$DEFAULT_STORAGE")
 reset_fake_tmux
 write_pane '%2' '1' 'existing-familiar' "$TIMESTAMP" codex "$DEFAULT_STORAGE" '%1' '0'
-if run_launcher --name "$guard_name" --cwd "$work_directory" >/dev/null 2>&1; then
+if run_launcher --name "$guard_name" --cwd "$work_directory" --harness codex >/dev/null 2>&1; then
   fail_test 'expected an existing managed Familiar to block the launch'
 fi
 assert_no_split
@@ -378,7 +454,7 @@ collision_name='durable-collision'
 collision_request=$(create_request "$collision_name" "$DEFAULT_STORAGE")
 touch -- "$DEFAULT_STORAGE/$TIMESTAMP-fmrq-$collision_name.md"
 reset_fake_tmux
-if run_launcher --name "$collision_name" --cwd "$work_directory" >/dev/null 2>&1; then
+if run_launcher --name "$collision_name" --cwd "$work_directory" --harness codex >/dev/null 2>&1; then
   fail_test 'expected an existing durable request to block the launch'
 fi
 assert_no_split
@@ -388,7 +464,7 @@ split_failure_name='split-failure'
 split_failure_request=$(create_request "$split_failure_name" "$DEFAULT_STORAGE")
 reset_fake_tmux
 FAKE_TMUX_FAIL_COMMAND='split-window'
-if run_launcher --name "$split_failure_name" --cwd "$work_directory" >/dev/null 2>&1; then
+if run_launcher --name "$split_failure_name" --cwd "$work_directory" --harness codex >/dev/null 2>&1; then
   fail_test 'expected a split-window failure'
 fi
 FAKE_TMUX_FAIL_COMMAND=''
@@ -399,7 +475,7 @@ metadata_failure_name='metadata-failure'
 metadata_failure_request=$(create_request "$metadata_failure_name" "$DEFAULT_STORAGE")
 reset_fake_tmux
 FAKE_TMUX_FAIL_SET_OPTION='@familiar_home'
-if run_launcher --name "$metadata_failure_name" --cwd "$work_directory" >/dev/null 2>&1; then
+if run_launcher --name "$metadata_failure_name" --cwd "$work_directory" --harness codex >/dev/null 2>&1; then
   fail_test 'expected a metadata failure'
 fi
 FAKE_TMUX_FAIL_SET_OPTION=''
@@ -415,6 +491,7 @@ invalid_name='status-invalid'
 dead_name='status-dead'
 historical_name='historical-status'
 historical_timestamp='250101-1234'
+legacy_name='legacy-status'
 delivered_response=$(response_path_for "$delivered_name")
 invalid_response=$(response_path_for "$invalid_name")
 historical_response="$status_storage/$historical_timestamp-fmrs-$historical_name.md"
@@ -426,6 +503,7 @@ write_pane '%5' '1' "$awaiting_name" "$TIMESTAMP" claude "$status_storage" '%1' 
 write_pane '%7' '1' "$invalid_name" "$TIMESTAMP" claude "$status_storage" '%1' '0'
 write_pane '%8' '1' "$dead_name" "$TIMESTAMP" codex "$status_storage" '%1' '1'
 write_pane '%9' '1' "$historical_name" "$historical_timestamp" claude "$status_storage" '%1' '0'
+write_pane '%10' '1' "$legacy_name" "$TIMESTAMP" '' "$status_storage" '%1' '0'
 write_pane '%15' '1' 'other-summoner' "$TIMESTAMP" codex "$status_storage" '%99' '0'
 FAMILIAR_HOME=''
 status_output=$(run_status)
@@ -433,6 +511,7 @@ assert_contains "$status_output" 'Managed Familiar: status-delivered (codex, pan
 assert_contains "$status_output" 'Managed Familiar: status-awaiting (claude, pane %5, awaiting response)'
 assert_contains "$status_output" 'Managed Familiar: status-invalid (claude, pane %7, response path invalid)'
 assert_contains "$status_output" 'Managed Familiar: status-dead (codex, pane %8, ended without response)'
+assert_contains "$status_output" 'Managed Familiar: legacy-status (unknown, pane %10, awaiting response)'
 assert_contains "$status_output" "  request: $status_storage/$historical_timestamp-fmrq-$historical_name.md"
 assert_contains "$status_output" "  response: $historical_response"
 assert_not_contains "$status_output" 'other-summoner'

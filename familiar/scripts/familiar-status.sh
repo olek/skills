@@ -23,7 +23,9 @@ readonly DEFAULT_AUTO_CLOSE_SECONDS=60
 readonly AUTO_CLOSE_POLL_INTERVAL_SECONDS=1
 
 # shellcheck disable=SC1091
-source "$SCRIPT_DIRECTORY/familiar-config.sh"
+source "$SCRIPT_DIRECTORY/familiar-paths.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIRECTORY/familiar-harness.sh"
 
 usage() {
   printf 'Usage: %s [--wait] [--timeout <seconds>] [--auto-close]\n' "${0##*/}" >&2
@@ -108,12 +110,14 @@ managed_familiar_rows() {
   local -r summoner_pane=$1
 
   # Each row contains pane ID, name, timestamp, harness, home, and dead flag.
+  # A pane with no recorded harness is reported as "unknown"; the launcher
+  # always records one, so this only guards against missing metadata.
   tmux list-panes -a -F $'#{pane_id}\t#{@familiar}\t#{@familiar_name}\t#{@familiar_timestamp}\t#{@familiar_harness}\t#{@familiar_home}\t#{@familiar_summoner_pane}\t#{pane_dead}' \
     | awk -F '\t' -v summoner="$summoner_pane" '
       $2 == "1" && $7 == summoner {
         harness = $5
         if (harness == "") {
-          harness = "codex"
+          harness = "unknown"
         }
         printf "%s\t%s\t%s\t%s\t%s\t%s\n", $1, $3, $4, harness, $6, $8
       }'

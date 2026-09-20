@@ -9,7 +9,8 @@
 # allowed per summoning agent instance.
 #
 # Run this only from the pane that requested the Familiar, with a bare
-# --name, an absolute --cwd path, and optional harness/model/effort settings.
+# --name, an absolute --cwd path, a required --harness, and optional
+# model/effort settings.
 # TMUX_PANE is intentionally used as the target rather than tmux's active
 # client/window.  Consequently, if the user switches windows or sessions while
 # the Familiar is being prepared, it still opens in the requesting pane's
@@ -28,10 +29,12 @@ readonly FAMILIAR_SUMMONER_PANE_OPTION='@familiar_summoner_pane'
 readonly FAMILIAR_STATUS_LINE_CONFIG='tui.status_line=["model-with-reasoning","approval-mode","context-used","context-window-size"]'
 
 # shellcheck disable=SC1091
-source "$SCRIPT_DIRECTORY/familiar-config.sh"
+source "$SCRIPT_DIRECTORY/familiar-paths.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIRECTORY/familiar-harness.sh"
 
 usage() {
-  printf 'Usage: %s --name <bare-familiar-name> --cwd <absolute-project-directory> [--harness <codex|claude>] [--model <target-harness-model>] [--effort <target-harness-effort>]\n' "$PROGRAM_NAME" >&2
+  printf 'Usage: %s --name <bare-familiar-name> --cwd <absolute-project-directory> --harness <harness> [--model <target-harness-model>] [--effort <target-harness-effort>]\n' "$PROGRAM_NAME" >&2
 }
 
 fail() {
@@ -39,20 +42,13 @@ fail() {
   exit 1
 }
 
-shell_quote() {
-  local escaped_value=$1
-  escaped_value=${escaped_value//\'/\'"\'"\'}
-  printf "'%s'" "$escaped_value"
-}
-
 parse_arguments() {
   local -n familiar_name_ref=$1
   local -n working_directory_ref=$2
   local -n harness_ref=$3
-  local -n harness_seen_ref=$4
-  local -n model_ref=$5
-  local -n effort_ref=$6
-  shift 6
+  local -n model_ref=$4
+  local -n effort_ref=$5
+  shift 5
 
   while (($#)); do
     case "$1" in
@@ -68,11 +64,10 @@ parse_arguments() {
             working_directory_ref=$2
             ;;
           --harness)
-            (( ! harness_seen_ref )) || fail '--harness may be specified once'
+            [[ -z $harness_ref ]] || fail '--harness may be specified once'
             [[ -n $2 ]] || fail '--harness requires one non-empty value'
             # shellcheck disable=SC2034 # This nameref returns the harness to main.
             harness_ref=$2
-            harness_seen_ref=1
             ;;
           --model)
             [[ -z $model_ref && -n $2 ]] || fail '--model requires one non-empty value'
@@ -106,35 +101,20 @@ validate_inputs() {
 
   [[ -n ${TMUX:-} ]] || fail 'This launcher must run inside tmux.'
   [[ -n ${TMUX_PANE:-} ]] || fail 'This launcher must run from a tmux pane.'
-  [[ -n $familiar_name && -n $working_directory ]] || {
+  [[ -n $familiar_name && -n $working_directory && -n $harness ]] || {
     usage
-    fail 'The --name and --cwd options are required.'
+    fail 'The --name, --cwd, and --harness options are required.'
   }
   familiar_validate_name "$familiar_name" || fail 'Familiar name must be lowercase kebab-case without an fm, fmrq, or fmrs prefix.'
   [[ $working_directory = /* ]] || fail 'The --cwd path must be absolute.'
-  case "$harness" in
-    codex|claude)
-      if ! command -v "$harness" >/dev/null 2>&1; then
-        if [[ $harness == codex ]]; then
-          fail 'The Codex executable is not available: codex'
-        fi
-        fail 'The Claude Code executable is not available: claude'
-      fi
-      ;;
-    *)
-      fail "Unknown harness: $harness (expected codex or claude)"
-      ;;
-  esac
+  familiar_harness_is_known "$harness" || fail "Unknown harness: $harness"
+  local executable
+  executable=$(familiar_harness_executable "$harness") || fail "Harness does not define an executable: $harness"
+  command -v "$executable" >/dev/null 2>&1 || fail "The $executable executable is not available: $executable"
   [[ -z $model || $model != -* ]] || fail 'Model ID must not begin with a hyphen.'
   [[ -z $effort || $effort != -* ]] || fail 'Reasoning effort must not begin with a hyphen.'
-  if [[ $harness == claude && -n $effort ]]; then
-    case "$effort" in
-      low|medium|high|xhigh|max)
-        ;;
-      *)
-        fail 'Claude effort must be one of: low, medium, high, xhigh, max.'
-        ;;
-    esac
+  if [[ -n $effort ]] && ! familiar_harness_validate_effort "$harness" "$effort"; then
+    fail "Unsupported effort for Familiar harness $harness: $effort"
   fi
 }
 
@@ -205,65 +185,6 @@ build_familiar_prompt() {
     "$request_file" "$response_file" "$response_file"
 }
 
-build_codex_command() {
-  local -r working_directory=$1
-  local -r familiar_prompt=$2
-  local -r model=$3
-  local -r effort=$4
-  local command='exec codex --no-alt-screen --approve-for-me'
-
-  printf -v command '%s --config %s' "$command" "$(shell_quote "$FAMILIAR_STATUS_LINE_CONFIG")"
-
-  if [[ -n $model ]]; then
-    printf -v command '%s --model %s' "$command" "$(shell_quote "$model")"
-  fi
-  if [[ -n $effort ]]; then
-    printf -v command '%s --config %s' "$command" "$(shell_quote "model_reasoning_effort=$effort")"
-  fi
-  printf -v command '%s --cd %s %s' "$command" \
-    "$(shell_quote "$working_directory")" "$(shell_quote "$familiar_prompt")"
-  printf '%s' "$command"
-}
-
-build_claude_command() {
-  local -r session_name=$1
-  local -r familiar_prompt=$2
-  local -r model=$3
-  local -r effort=$4
-  local command='CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1 exec claude --permission-mode auto'
-
-  printf -v command '%s --name %s' "$command" "$(shell_quote "$session_name")"
-  if [[ -n $model ]]; then
-    printf -v command '%s --model %s' "$command" "$(shell_quote "$model")"
-  fi
-  if [[ -n $effort ]]; then
-    printf -v command '%s --effort %s' "$command" "$(shell_quote "$effort")"
-  fi
-  printf -v command '%s %s' "$command" "$(shell_quote "$familiar_prompt")"
-  printf '%s' "$command"
-}
-
-build_familiar_command() {
-  local -r harness=$1
-  local -r working_directory=$2
-  local -r session_name=$3
-  local -r familiar_prompt=$4
-  local -r model=$5
-  local -r effort=$6
-
-  case "$harness" in
-    codex)
-      build_codex_command "$working_directory" "$familiar_prompt" "$model" "$effort"
-      ;;
-    claude)
-      build_claude_command "$session_name" "$familiar_prompt" "$model" "$effort"
-      ;;
-    *)
-      fail "Cannot build a launch command for harness: $harness"
-      ;;
-  esac
-}
-
 launch_familiar() {
   local -r working_directory=$1
   local -r pane_command=$2
@@ -294,9 +215,7 @@ launch_familiar() {
 main() {
   local familiar_name_input=''
   local working_directory_input=''
-  local harness='codex'
-  # shellcheck disable=SC2034 # Passed by nameref to parse_arguments.
-  local harness_seen=0
+  local harness=''
   local model=''
   local effort=''
   local familiar_timestamp
@@ -309,7 +228,7 @@ main() {
   local familiar_prompt
   local pane_command
 
-  parse_arguments familiar_name_input working_directory_input harness harness_seen model effort "$@"
+  parse_arguments familiar_name_input working_directory_input harness model effort "$@"
   readonly familiar_name_input working_directory_input harness model effort
   validate_inputs "$familiar_name_input" "$working_directory_input" "$harness" "$model" "$effort"
   familiar_timestamp=$(familiar_current_timestamp)
@@ -322,7 +241,7 @@ main() {
 
   familiar_prompt=$(build_familiar_prompt "$request_file" "$response_file")
   readonly familiar_prompt
-  pane_command=$(build_familiar_command "$harness" "$working_directory" "$session_name" "$familiar_prompt" "$model" "$effort")
+  pane_command=$(familiar_harness_build_command "$harness" "$working_directory" "$session_name" "$familiar_prompt" "$model" "$effort" "$FAMILIAR_STATUS_LINE_CONFIG")
   readonly pane_command
   mv --no-clobber -- "$staged_request_file" "$request_file" || fail "Could not promote staged request: $staged_request_file"
   [[ ! -e $staged_request_file ]] || fail "Request path already exists; staged request was preserved: $request_file"
