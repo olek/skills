@@ -1,0 +1,6 @@
+interface:
+  display_name: "Familiar"
+  short_description: "Summon a named Familiar in tmux"
+  default_prompt: "Use $familiar to summon a Familiar for this focused task."
+policy:
+  allow_implicit_invocation: true
