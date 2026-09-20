@@ -20,22 +20,21 @@ tmux is the substrate; the scripts are small and single-purpose:
   pane. On pane or metadata failure it closes the partial pane and restores the
   staged request when possible.
 - **`scripts/familiar-harness.sh`** - discovers harness definitions by scanning
-  `harnesses/*.sh` (no central list), sources them, dispatches shared launcher
-  operations, and provides the shell-quoting helper.
-- **`scripts/harnesses/*.sh`** - one self-contained, namespaced definition per
-  harness: executable, embedded models and efforts, session-name support, effort
-  validation, intent suggestions, and pane-command builder, per the contract in
-  `scripts/harnesses/README.md`. Add a harness by dropping in one file. `opencode`
-  and `antigravity` are planned drop-ins.
+  `harnesses/*.sh` (no central list), loads the selected definition, and provides
+  the shell-quoting helper.
+- **`scripts/harnesses/*.sh`** - one self-contained definition per harness using
+  a shared generic interface: executable, embedded models and efforts, intent
+  suggestions, and pane-command builder, per the contract in
+  `scripts/harnesses/README.md`. Add a harness by dropping in one file.
 - **`scripts/familiar-status.sh`** - finds the current agent's Familiar, derives
   paths from its pane metadata, and reports name, harness, pane, paths, and
   delivery state. `--wait` polls quietly until delivery or failure; `--auto-close`
   extends that one invocation (see below).
-- **`scripts/familiar-models.sh`** - prints a definition's embedded models,
-  efforts, or intent suggestion. The catalog is hand-maintained, with no runtime
-  fetch or cache.
+- **`scripts/familiar-models.sh`** - prints a definition's models, efforts, or
+  intent suggestion. Each harness owns its catalog and may embed it or query its
+  CLI when availability depends on local configuration.
 - **`tests/test-familiar.sh`** - exercises the scripts against a fake tmux and fake
-  `codex`/`claude` on `PATH`, asserting launch commands, catalog output, harness
+  harness executables on `PATH`, asserting launch commands, catalog output, harness
   discovery, derived paths, pane metadata, guard failures, and status/wait
   reporting. It never touches a real tmux server.
 
@@ -92,7 +91,7 @@ skill stays stateless - the pane is the record:
 | `@familiar` | `1` marks a managed Familiar pane |
 | `@familiar_name` | caller-supplied bare name |
 | `@familiar_timestamp` | `YYMMDD-HHMM` launch timestamp |
-| `@familiar_harness` | `codex` or `claude` |
+| `@familiar_harness` | selected harness name |
 | `@familiar_home` | canonical Familiar home for the launch |
 | `@familiar_summoner_pane` | pane ID of the summoning agent |
 

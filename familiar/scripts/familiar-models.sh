@@ -22,8 +22,6 @@ main() {
   local harness_seen=0
   local show_efforts=0
   local intent=''
-  local models
-  local efforts
 
   while (($#)); do
     case "$1" in
@@ -61,24 +59,19 @@ main() {
     usage
     fail 'The --harness option is required.'
   }
-  familiar_harness_is_known "$harness" || fail "Unknown Familiar harness: $harness"
+  familiar_harness_load "$harness" || exit 1
   if [[ -n $intent ]] && (( show_efforts )); then
     fail 'Choose either --efforts or --intent.'
   fi
 
   if [[ -n $intent ]]; then
-    if ! models=$(familiar_harness_intent_model "$harness" "$intent"); then
+    if ! familiar_harness_intent_pair "$intent"; then
       fail "Unknown intent for Familiar harness $harness: $intent (expected planning, implementation, or review)"
     fi
-    if ! efforts=$(familiar_harness_intent_effort "$harness" "$intent"); then
-      fail "Unknown intent for Familiar harness $harness: $intent (expected planning, implementation, or review)"
-    fi
-    [[ -n $models ]] && printf 'model: %s\n' "$models"
-    printf 'effort: %s\n' "$efforts"
   elif (( show_efforts )); then
-    familiar_harness_efforts "$harness"
+    familiar_harness_efforts
   else
-    familiar_harness_models "$harness"
+    familiar_harness_models
   fi
 }
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
+# Exercise Familiar path handling, harness commands, launching, and status reporting.
 set -euo pipefail
 
 SKILL_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 readonly SKILL_ROOT
-readonly CONFIG="$SKILL_ROOT/scripts/familiar-paths.sh"
+readonly PATHS_SCRIPT="$SKILL_ROOT/scripts/familiar-paths.sh"
 readonly LAUNCHER="$SKILL_ROOT/scripts/summon-familiar.sh"
 readonly STATUS="$SKILL_ROOT/scripts/familiar-status.sh"
 readonly MODELS="$SKILL_ROOT/scripts/familiar-models.sh"
@@ -35,6 +36,22 @@ touch -- "$FAKE_TMUX_STATE" "$FAKE_TMUX_CALLS" "$FAKE_TMUX_OPTIONS" "$FAKE_TMUX_
 
 touch -- "$FAKE_BIN/codex" "$FAKE_BIN/claude"
 chmod +x -- "$FAKE_BIN/codex" "$FAKE_BIN/claude"
+
+cat > "$FAKE_BIN/opencode" <<'FAKE_OPENCODE'
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ ${1:-} == models ]] && printf 'provider/opencode-test-model\n'
+FAKE_OPENCODE
+chmod +x -- "$FAKE_BIN/opencode"
+
+cat > "$FAKE_BIN/agy" <<'FAKE_ANTIGRAVITY'
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ ${1:-} == models ]] && printf 'antigravity-test-model\n'
+FAKE_ANTIGRAVITY
+chmod +x -- "$FAKE_BIN/agy"
 
 cat > "$FAKE_BIN/date" <<'FAKE_DATE'
 #!/usr/bin/env bash
@@ -141,6 +158,7 @@ assert_file_not_contains() {
 assert_no_split() {
   local split_count
   split_count=$(awk '$1 == "split-window" { count++ } END { print count + 0 }' "$FAKE_TMUX_CALLS")
+  readonly split_count
   [[ $split_count == 0 ]] || fail_test "expected no split-window call, got $split_count"
 }
 
@@ -156,7 +174,7 @@ run_config() {
     HOME="$TEST_HOME" \
     FAMILIAR_HOME="$FAMILIAR_HOME" \
     TEST_TIMESTAMP="$TIMESTAMP" \
-    "$CONFIG" "$@"
+    "$PATHS_SCRIPT" "$@"
 }
 
 run_launcher() {
@@ -210,7 +228,7 @@ response_path_for() {
 create_request() {
   local -r familiar_name=$1
   local -r storage_directory=$2
-  local request_file="$storage_directory/antechamber/$familiar_name.md"
+  local -r request_file="$storage_directory/antechamber/$familiar_name.md"
 
   printf 'Test request for %s.\n' "$familiar_name" > "$request_file"
   printf '%s\n' "$request_file"
@@ -224,15 +242,18 @@ reset_fake_tmux() {
   : > "$FAKE_TMUX_LIST_COUNT"
 }
 
+# Verify harness discovery and each harness's advertised launch choices.
 discovered_harnesses=$(bash -c 'source "$1"; familiar_harness_all' -- "$HARNESS_LOADER")
 assert_contains "$discovered_harnesses" 'codex'
 assert_contains "$discovered_harnesses" 'claude'
+assert_contains "$discovered_harnesses" 'opencode'
+assert_contains "$discovered_harnesses" 'antigravity'
 
-unknown_dispatch_output=''
-if unknown_dispatch_output=$(bash -c 'source "$1"; familiar_harness_executable "$2"' -- "$HARNESS_LOADER" unknown 2>&1); then
-  fail_test 'expected an unknown harness dispatch to fail'
+unknown_harness_output=''
+if unknown_harness_output=$(bash -c 'source "$1"; familiar_harness_load "$2"' -- "$HARNESS_LOADER" unknown 2>&1); then
+  fail_test 'expected loading an unknown harness to fail'
 fi
-assert_contains "$unknown_dispatch_output" 'Unknown Familiar harness: unknown'
+assert_contains "$unknown_harness_output" 'Unknown Familiar harness: unknown'
 
 harness_copy="$TEST_ROOT/harness-copy"
 mkdir -p -- "$harness_copy/harnesses"
@@ -242,39 +263,69 @@ cp -- "$SKILL_ROOT/scripts/harnesses/claude.sh" "$harness_copy/harnesses/claude.
 cat > "$harness_copy/harnesses/scratch.sh" <<'SCRATCH_HARNESS'
 #!/usr/bin/env bash
 
-familiar_harness_scratch_executable() {
+familiar_harness_executable() {
   printf 'scratch\n'
 }
 SCRATCH_HARNESS
 scratch_harnesses=$(bash -c 'source "$1"; familiar_harness_all' -- "$harness_copy/familiar-harness.sh")
 assert_contains "$scratch_harnesses" 'scratch'
+loaded_codex_executable=$(
+  bash -c 'source "$1"; familiar_harness_load codex; familiar_harness_executable' -- "$harness_copy/familiar-harness.sh"
+)
+assert_equals "$loaded_codex_executable" 'codex'
+loaded_scratch_executable=$(
+  bash -c 'source "$1"; familiar_harness_load scratch; familiar_harness_executable' -- "$harness_copy/familiar-harness.sh"
+)
+assert_equals "$loaded_scratch_executable" 'scratch'
+
+for default_intent_harness in opencode antigravity; do
+  for intent in planning implementation review; do
+    assert_equals "$(run_models --harness "$default_intent_harness" --intent "$intent")" 'default default'
+  done
+done
+
+opencode_models=$(run_models --harness opencode)
+assert_contains "$opencode_models" 'provider/opencode-test-model'
+opencode_efforts_output=''
+if opencode_efforts_output=$(run_models --harness opencode --efforts 2>&1); then
+  fail_test 'expected OpenCode effort discovery to report unsupported launch-time overrides'
+fi
+assert_contains "$opencode_efforts_output" 'does not support launch-time effort overrides'
+opencode_effort_command_output=''
+if opencode_effort_command_output=$(
+  bash -c 'source "$1"; familiar_harness_load opencode; familiar_harness_build_command /tmp session prompt model high config' \
+    -- "$HARNESS_LOADER" 2>&1
+); then
+  fail_test 'expected OpenCode command construction with an effort override to fail'
+fi
+assert_contains "$opencode_effort_command_output" 'does not support launch-time effort overrides'
+antigravity_models=$(run_models --harness antigravity)
+assert_contains "$antigravity_models" 'antigravity-test-model'
+antigravity_efforts=$(run_models --harness antigravity --efforts)
+assert_contains "$antigravity_efforts" 'high'
 
 codex_models=$(run_models --harness codex)
 assert_contains "$codex_models" 'gpt-5.6-luna'
+assert_not_contains "$codex_models" 'default'
 codex_efforts=$(run_models --harness codex --efforts)
 assert_contains "$codex_efforts" 'ultra'
+assert_not_contains "$codex_efforts" 'default'
 codex_planning_intent=$(run_models --harness codex --intent planning)
-assert_contains "$codex_planning_intent" 'model: gpt-5.6-sol'
-assert_contains "$codex_planning_intent" 'effort: medium'
+assert_equals "$codex_planning_intent" 'gpt-5.6-sol medium'
 claude_models=$(run_models --harness claude)
 assert_contains "$claude_models" 'sonnet'
 claude_efforts=$(run_models --harness claude --efforts)
 assert_not_contains "$claude_efforts" 'ultra'
 codex_implementation_intent=$(run_models --harness codex --intent implementation)
-assert_contains "$codex_implementation_intent" 'model: gpt-5.6-terra'
-assert_contains "$codex_implementation_intent" 'effort: medium'
+assert_equals "$codex_implementation_intent" 'gpt-5.6-terra medium'
 codex_review_intent=$(run_models --harness codex --intent review)
-assert_contains "$codex_review_intent" 'model: gpt-5.6-sol'
-assert_contains "$codex_review_intent" 'effort: medium'
+assert_equals "$codex_review_intent" 'gpt-5.6-sol medium'
 claude_planning_intent=$(run_models --harness claude --intent planning)
-assert_contains "$claude_planning_intent" 'model: opus'
-assert_contains "$claude_planning_intent" 'effort: medium'
+assert_equals "$claude_planning_intent" 'opus medium'
 claude_implementation_intent=$(run_models --harness claude --intent implementation)
-assert_contains "$claude_implementation_intent" 'model: sonnet'
-assert_contains "$claude_implementation_intent" 'effort: high'
+assert_equals "$claude_implementation_intent" 'sonnet high'
 claude_review_intent=$(run_models --harness claude --intent review)
-assert_contains "$claude_review_intent" 'model: opus'
-assert_contains "$claude_review_intent" 'effort: medium'
+assert_equals "$claude_review_intent" 'opus medium'
 
 # A managed Familiar pane's metadata, one row per pane:
 #   pane_id  familiar  bare_name  timestamp  harness  storage  summoner  pane_dead
@@ -282,6 +333,7 @@ write_pane() {
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$@" >> "$FAKE_TMUX_STATE"
 }
 
+# Verify storage paths and successful launch lifecycle transitions.
 work_directory="$TEST_ROOT/familiar dir's space"
 mkdir -p -- "$work_directory"
 
@@ -333,7 +385,8 @@ reset_fake_tmux
 default_launch_output=$(run_launcher --name "$default_name" --cwd "$work_directory" --harness codex)
 default_command=$(tail -n 1 "$FAKE_TMUX_SPLIT_ARGS")
 expected_prompt="Read and follow the request at $default_timestamped_request. The resolved response path is $default_response. Work only within its stated scope. Do not create $default_response until the result is complete; then write the complete result there in a single write and state completion in this Familiar session. You may delegate read-only work (research, reading, checks) to headless sub-agents (cheaper models are fine), but make every file change yourself."
-assert_contains "$default_command" 'exec codex --no-alt-screen --approve-for-me'
+assert_contains "$default_command" 'exec codex --no-alt-screen'
+assert_not_contains "$default_command" '--approve-for-me'
 assert_contains "$default_command" "--config $(shell_quote 'tui.status_line=["model-with-reasoning","approval-mode","context-used","context-window-size"]')"
 assert_contains "$default_command" "--cd $(shell_quote "$work_directory")"
 assert_contains "$default_command" "$(shell_quote "$expected_prompt")"
@@ -365,13 +418,14 @@ assert_file_contains "$FAKE_TMUX_OPTIONS" $'@familiar_harness\tcodex'
 claude_name='claude-model-selection'
 create_request "$claude_name" "$DEFAULT_STORAGE" >/dev/null
 reset_fake_tmux
-run_launcher --name "$claude_name" --cwd "$work_directory" --harness claude --model sonnet --effort xhigh >/dev/null
+run_launcher --name "$claude_name" --cwd "$work_directory" --harness claude --model sonnet --effort ultra >/dev/null
 claude_command=$(tail -n 1 "$FAKE_TMUX_SPLIT_ARGS")
 assert_contains "$claude_command" 'CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1'
-assert_contains "$claude_command" 'exec claude --permission-mode auto'
+assert_contains "$claude_command" 'exec claude'
+assert_not_contains "$claude_command" '--permission-mode'
 assert_contains "$claude_command" "--name $(shell_quote "$TIMESTAMP-fm-$claude_name")"
 assert_contains "$claude_command" "--model $(shell_quote sonnet)"
-assert_contains "$claude_command" "--effort $(shell_quote xhigh)"
+assert_contains "$claude_command" "--effort $(shell_quote ultra)"
 assert_not_contains "$claude_command" 'codex'
 assert_not_contains "$claude_command" '--approve-for-me'
 assert_not_contains "$claude_command" '--no-alt-screen'
@@ -380,6 +434,45 @@ assert_not_contains "$claude_command" '--config'
 assert_not_contains "$claude_command" 'model_reasoning_effort'
 assert_file_contains "$FAKE_TMUX_OPTIONS" $'@familiar_name\t'"$claude_name"
 assert_file_contains "$FAKE_TMUX_OPTIONS" $'@familiar_timestamp\t'"$TIMESTAMP"
+
+opencode_name='opencode-model-selection'
+create_request "$opencode_name" "$DEFAULT_STORAGE" >/dev/null
+reset_fake_tmux
+run_launcher --name "$opencode_name" --cwd "$work_directory" --harness opencode --model provider/model >/dev/null
+opencode_command=$(tail -n 1 "$FAKE_TMUX_SPLIT_ARGS")
+assert_contains "$opencode_command" 'exec opencode'
+assert_contains "$opencode_command" "--model $(shell_quote provider/model)"
+assert_contains "$opencode_command" '--prompt '
+assert_contains "$opencode_command" "$TIMESTAMP-fmrs-$opencode_name.md"
+assert_not_contains "$opencode_command" '--auto'
+assert_not_contains "$opencode_command" '--effort'
+
+antigravity_name='antigravity-model-selection'
+create_request "$antigravity_name" "$DEFAULT_STORAGE" >/dev/null
+reset_fake_tmux
+run_launcher --name "$antigravity_name" --cwd "$work_directory" --harness antigravity --model gemini-pro --effort high >/dev/null
+antigravity_command=$(tail -n 1 "$FAKE_TMUX_SPLIT_ARGS")
+assert_contains "$antigravity_command" 'exec agy'
+assert_contains "$antigravity_command" "--model $(shell_quote gemini-pro)"
+assert_contains "$antigravity_command" "--effort $(shell_quote high)"
+assert_contains "$antigravity_command" '--prompt-interactive '
+assert_contains "$antigravity_command" "$TIMESTAMP-fmrs-$antigravity_name.md"
+assert_not_contains "$antigravity_command" '--dangerously-skip-permissions'
+
+# Invalid input and launch failures must not consume the staged request.
+for default_option in model effort; do
+  reset_fake_tmux
+  explicit_default_output=''
+  if explicit_default_output=$(run_launcher \
+    --name "explicit-default-$default_option" \
+    --cwd "$work_directory" \
+    --harness codex \
+    "--$default_option" default 2>&1); then
+    fail_test "expected explicit --$default_option default to fail"
+  fi
+  assert_contains "$explicit_default_output" "Omit --$default_option to use the harness-configured default."
+  assert_no_split
+done
 
 invalid_name_case=0
 for invalid_name in \
@@ -424,12 +517,6 @@ assert_no_split
 reset_fake_tmux
 if run_launcher --name 'absent-harness' --cwd "$work_directory" >/dev/null 2>&1; then
   fail_test 'expected an omitted --harness to fail'
-fi
-assert_no_split
-
-reset_fake_tmux
-if run_launcher --name 'invalid-effort' --cwd "$work_directory" --harness claude --effort ultra >/dev/null 2>&1; then
-  fail_test 'expected unsupported Claude effort to fail'
 fi
 assert_no_split
 
@@ -483,6 +570,7 @@ FAKE_TMUX_FAIL_SET_OPTION=''
 [[ ! -e $DEFAULT_STORAGE/$TIMESTAMP-fmrq-$metadata_failure_name.md ]] || fail_test 'expected no durable request after metadata failure'
 assert_file_contains "$FAKE_TMUX_CALLS" 'kill-pane'
 
+# Verify reporting, waiting, and auto-close states across managed panes.
 status_storage="$OVERRIDE_STORAGE"
 FAMILIAR_HOME="$status_storage"
 delivered_name='status-delivered'

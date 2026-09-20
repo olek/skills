@@ -107,15 +107,15 @@ validate_inputs() {
   }
   familiar_validate_name "$familiar_name" || fail 'Familiar name must be lowercase kebab-case without an fm, fmrq, or fmrs prefix.'
   [[ $working_directory = /* ]] || fail 'The --cwd path must be absolute.'
-  familiar_harness_is_known "$harness" || fail "Unknown harness: $harness"
+  familiar_harness_load "$harness" || return 1
   local executable
-  executable=$(familiar_harness_executable "$harness") || fail "Harness does not define an executable: $harness"
+  executable=$(familiar_harness_executable) || fail "Harness does not define an executable: $harness"
+  readonly executable
   command -v "$executable" >/dev/null 2>&1 || fail "The $executable executable is not available: $executable"
   [[ -z $model || $model != -* ]] || fail 'Model ID must not begin with a hyphen.'
   [[ -z $effort || $effort != -* ]] || fail 'Reasoning effort must not begin with a hyphen.'
-  if [[ -n $effort ]] && ! familiar_harness_validate_effort "$harness" "$effort"; then
-    fail "Unsupported effort for Familiar harness $harness: $effort"
-  fi
+  [[ $model != default ]] || fail 'Omit --model to use the harness-configured default.'
+  [[ $effort != default ]] || fail 'Omit --effort to use the harness-configured default.'
 }
 
 resolve_paths() {
@@ -142,6 +142,7 @@ resolve_paths() {
   staged_request_file_input=$(familiar_staged_request_path "$familiar_name")
   request_file_input=$(familiar_request_path "$familiar_timestamp" "$familiar_name")
   response_file_input=$(familiar_response_path "$familiar_timestamp" "$familiar_name")
+  readonly antechamber_directory storage_directory_input staged_request_file_input request_file_input response_file_input
 
   [[ -f $staged_request_file_input && -r $staged_request_file_input ]] || fail "Staged request is not a readable file: $staged_request_file_input"
   [[ -d $storage_directory_input && -r $storage_directory_input && -w $storage_directory_input ]] || fail "Familiar storage directory is not a writable directory: $storage_directory_input"
@@ -151,10 +152,12 @@ resolve_paths() {
   [[ -d $working_directory_input && -r $working_directory_input ]] || fail "Working directory is not readable: $working_directory_input"
 
   storage_parent=$(realpath -e -- "$storage_directory_input") || fail "Familiar storage directory does not exist: $storage_directory_input"
+  readonly storage_parent
   # shellcheck disable=SC2034 # This nameref returns canonical Familiar home to main.
   resolved_storage_directory_ref=$storage_parent
   request_basename=${request_file_input##*/}
   response_basename=${response_file_input##*/}
+  readonly request_basename response_basename
   # shellcheck disable=SC2034 # These namerefs return resolved paths to main.
   resolved_staged_request_file_ref=$(realpath -e -- "$staged_request_file_input")
   # shellcheck disable=SC2034 # These namerefs return resolved paths to main.
@@ -196,6 +199,7 @@ launch_familiar() {
   local pane_id
 
   window_id=$(tmux display-message -p -t "$TMUX_PANE" '#{window_id}')
+  readonly window_id
   if ! pane_id=$(tmux split-window -h -c "$working_directory" -t "$window_id" -P -F '#{pane_id}' "$pane_command"); then
     return 1
   fi
@@ -241,8 +245,11 @@ main() {
 
   familiar_prompt=$(build_familiar_prompt "$request_file" "$response_file")
   readonly familiar_prompt
-  pane_command=$(familiar_harness_build_command "$harness" "$working_directory" "$session_name" "$familiar_prompt" "$model" "$effort" "$FAMILIAR_STATUS_LINE_CONFIG")
+  pane_command=$(familiar_harness_build_command "$working_directory" "$session_name" "$familiar_prompt" "$model" "$effort" "$FAMILIAR_STATUS_LINE_CONFIG")
   readonly pane_command
+
+  # Promotion is the durable handoff boundary. Restore the staged request if
+  # pane creation or metadata setup fails so the caller can safely retry.
   mv --no-clobber -- "$staged_request_file" "$request_file" || fail "Could not promote staged request: $staged_request_file"
   [[ ! -e $staged_request_file ]] || fail "Request path already exists; staged request was preserved: $request_file"
   local pane_id
@@ -252,6 +259,7 @@ main() {
     fi
     fail "Could not launch the Familiar; recover the request from: $request_file"
   fi
+  readonly pane_id
   printf '%s\n' "$pane_id"
   printf 'request: %s\nresponse: %s\n' "$request_file" "$response_file"
 }

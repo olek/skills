@@ -27,6 +27,7 @@ familiar_antechamber_directory() {
   local directory
 
   directory=$(familiar_storage_directory) || return 1
+  readonly directory
   familiar_validate_storage_directory "$directory" || return 1
   printf '%s/antechamber\n' "${directory%/}"
 }
@@ -78,6 +79,7 @@ familiar_path_in_storage() {
   local directory
 
   directory=$(familiar_storage_directory) || return 1
+  readonly directory
   familiar_validate_storage_directory "$directory" || return 1
   familiar_path_in_directory "$directory" "$filename"
 }
@@ -98,6 +100,7 @@ familiar_staged_request_path() {
   local antechamber_directory
 
   antechamber_directory=$(familiar_antechamber_directory) || return 1
+  readonly antechamber_directory
   printf '%s/%s\n' "$antechamber_directory" "$(familiar_staged_request_filename "$1")"
 }
 
@@ -156,6 +159,7 @@ familiar_paths_main() {
 
   local storage_directory
   storage_directory=$(familiar_storage_directory) || familiar_paths_fail 'HOME must be set when FAMILIAR_HOME is not set.'
+  readonly storage_directory
   familiar_validate_storage_directory "$storage_directory" || familiar_paths_fail 'FAMILIAR_HOME must be an absolute path.'
 
   if [[ $output_kind == '--directory' || $output_kind == '--antechamber-directory' ]]; then
@@ -173,6 +177,7 @@ familiar_paths_main() {
 
   local familiar_timestamp
   familiar_timestamp=$(familiar_current_timestamp)
+  readonly familiar_timestamp
   case "$output_kind" in
     --session-name)
       familiar_session_name "$familiar_timestamp" "$familiar_name"
@@ -180,6 +185,7 @@ familiar_paths_main() {
     --request-path)
       local antechamber_directory
       antechamber_directory=$(familiar_antechamber_directory) || familiar_paths_fail 'Could not resolve the antechamber directory.'
+      readonly antechamber_directory
       mkdir -p -- "$antechamber_directory" || familiar_paths_fail "Could not create the antechamber directory: $antechamber_directory"
       familiar_staged_request_path "$familiar_name"
       ;;

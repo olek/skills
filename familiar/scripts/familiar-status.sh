@@ -59,7 +59,7 @@ response_status() {
 }
 
 parse_arguments() {
-  local -n wait_for_completion_ref=$1
+  local -n should_wait_ref=$1
   local -n wait_option_seen_ref=$2
   local -n timeout_seconds_ref=$3
   local -n auto_close_enabled_ref=$4
@@ -69,7 +69,7 @@ parse_arguments() {
     case "$1" in
       --wait)
         # shellcheck disable=SC2034 # This nameref returns the value to main.
-        wait_for_completion_ref=1
+        should_wait_ref=1
         # shellcheck disable=SC2034 # This nameref returns the value to main.
         wait_option_seen_ref=1
         shift
@@ -78,7 +78,7 @@ parse_arguments() {
         (($# >= 2)) || fail 'Missing value for --timeout'
         [[ $2 =~ ^[0-9]+$ ]] || fail '--timeout must be a non-negative integer number of seconds'
         # shellcheck disable=SC2034 # These namerefs return the values to main.
-        wait_for_completion_ref=1
+        should_wait_ref=1
         # shellcheck disable=SC2034 # This nameref returns the value to main.
         timeout_seconds_ref=$((10#$2))
         shift 2
@@ -157,11 +157,11 @@ report_familiars() {
   local request_file
   local response_file
   local derived_paths
-  local found_familiar=0
+  local has_managed_familiar=0
 
   while IFS=$'\t' read -r pane_id familiar_name familiar_timestamp familiar_harness storage_directory pane_dead; do
     [[ $pane_id ]] || continue
-    found_familiar=1
+    has_managed_familiar=1
 
     if ! derived_paths=$(derive_paths "$familiar_timestamp" "$familiar_name" "$storage_directory"); then
       report_invalid_metadata "$familiar_name" "$familiar_harness" "$pane_id"
@@ -179,7 +179,7 @@ report_familiars() {
     printf '  request: %s\n  response: %s\n' "$request_file" "$response_file"
   done < <(managed_familiar_rows "$summoner_pane")
 
-  if (( ! found_familiar )); then
+  if (( ! has_managed_familiar )); then
     printf 'No managed Familiar exists for this summoning agent instance.\n'
   fi
 }
@@ -194,16 +194,16 @@ completion_state() {
   local pane_dead
   local derived_paths
   local response_file
-  local found_familiar=0
-  local awaiting_response=0
-  local failed_familiar=0
+  local has_managed_familiar=0
+  local has_pending_response=0
+  local has_failure=0
 
   while IFS=$'\t' read -r pane_id familiar_name familiar_timestamp familiar_harness storage_directory pane_dead; do
     [[ $pane_id ]] || continue
-    found_familiar=1
+    has_managed_familiar=1
 
     if ! derived_paths=$(derive_paths "$familiar_timestamp" "$familiar_name" "$storage_directory"); then
-      failed_familiar=1
+      has_failure=1
       continue
     fi
     IFS=$'\t' read -r _ response_file <<< "$derived_paths"
@@ -212,17 +212,17 @@ completion_state() {
       continue
     fi
     if [[ -e $response_file || $pane_dead == 1 ]]; then
-      failed_familiar=1
+      has_failure=1
     else
-      awaiting_response=1
+      has_pending_response=1
     fi
   done < <(managed_familiar_rows "$summoner_pane")
 
-  if (( ! found_familiar )); then
+  if (( ! has_managed_familiar )); then
     printf 'no-familiar'
-  elif (( failed_familiar )); then
+  elif (( has_failure )); then
     printf 'failed'
-  elif (( awaiting_response )); then
+  elif (( has_pending_response )); then
     printf 'waiting'
   else
     printf 'delivered'
@@ -239,7 +239,7 @@ open_familiar_pane_id() {
 wait_for_auto_close() {
   local -r summoner_pane=$1
   local -r inspection_seconds=$2
-  local started_at_seconds=$SECONDS
+  local -r started_at_seconds=$SECONDS
   local pane_id
   local remaining_seconds
   local sleep_seconds
@@ -273,7 +273,7 @@ wait_for_completion() {
   local -r timeout_seconds=$2
   local -r auto_close_enabled=$3
   local -r auto_close_seconds=$4
-  local started_at_seconds=$SECONDS
+  local -r started_at_seconds=$SECONDS
   local state
   local remaining_seconds
   local sleep_seconds
@@ -313,20 +313,20 @@ wait_for_completion() {
 }
 
 main() {
-  local wait_for_completion=0
+  local should_wait=0
   # shellcheck disable=SC2034 # Passed by nameref to parse_arguments.
   local wait_option_seen=0
   local timeout_seconds=$DEFAULT_WAIT_TIMEOUT_SECONDS
   local auto_close_enabled=0
   local auto_close_seconds=${FAMILIAR_AUTO_CLOSE_SECONDS:-$DEFAULT_AUTO_CLOSE_SECONDS}
 
-  parse_arguments wait_for_completion wait_option_seen timeout_seconds auto_close_enabled "$@"
+  parse_arguments should_wait wait_option_seen timeout_seconds auto_close_enabled "$@"
   if (( auto_close_enabled )); then
     auto_close_seconds=$(normalize_auto_close_seconds "$auto_close_seconds" 'FAMILIAR_AUTO_CLOSE_SECONDS')
   fi
   [[ -n ${TMUX:-} ]] || fail 'This status command must run inside tmux.'
   [[ -n ${TMUX_PANE:-} ]] || fail 'This status command must run from a tmux pane.'
-  if (( wait_for_completion )); then
+  if (( should_wait )); then
     wait_for_completion "$TMUX_PANE" "$timeout_seconds" "$auto_close_enabled" "$auto_close_seconds"
   else
     report_familiars "$TMUX_PANE"

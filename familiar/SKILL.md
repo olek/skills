@@ -46,9 +46,9 @@ If that path already exists, stop and report it as a staging collision; do not
 overwrite, rename, or reuse it. Otherwise write the request there. Do not put the
 response path or completion contract in the request; the launcher injects those.
 
-End the request with the target harness, effective model (or `Claude configured
-default; no launcher override`), and effective effort, each marked specified or
-inferred.
+End the request with the target harness, effective model, and effective effort,
+each marked specified or inferred. For an omitted override, write `Harness
+configured default; no launcher override`.
 
 ## Summon
 
@@ -61,7 +61,7 @@ infer it.
 <skill-dir>/scripts/summon-familiar.sh \
   --name <bare-familiar-name> \
   --cwd /absolute/path/to/project \
-  --harness codex|claude \
+  --harness codex|claude|opencode|antigravity \
   [--model target-harness-model] \
   [--effort target-harness-effort]
 ```
@@ -76,7 +76,7 @@ completion in its pane when done.
 always wins, and model names are never translated between vendors. Given a model
 without an effort, do not invent one the model may not support.
 
-Query the hand-maintained catalogs:
+Query the selected harness catalogs:
 
 ```bash
 <skill-dir>/scripts/familiar-models.sh --harness <harness>
@@ -86,7 +86,9 @@ Query the hand-maintained catalogs:
 
 When the user names no model, pick the intent (planning, implementation, or
 review), query it, and use the complete model-effort pair returned - they are one
-inseparable pair; do not detach the effort as a general recommendation.
+inseparable pair; do not detach the effort as a general recommendation. An
+intent pair may use `default` for either field. Omit the corresponding `--model`
+or `--effort` launcher option; never pass `default` as its value.
 
 ## Check status and follow up
 

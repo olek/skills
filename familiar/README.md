@@ -21,18 +21,18 @@ parallel work you did not ask to see.
 
 The Familiar's engine is independent of your own: a Codex session can summon a
 Claude Familiar and vice versa. By default the summoning agent reuses its own
-harness, but you can name either `codex` or `claude` and pick the model and
-reasoning effort per task. A model you name is passed through verbatim and never
-translated between vendors. `opencode` and `antigravity` are planned but not yet
-available.
+harness, but you can name `codex`, `claude`, `opencode`, or `antigravity` and pick
+the model and reasoning effort supported by that harness. Explicit model and
+effort values are passed through unchanged and are not validated against the
+informational catalogs or translated between vendors.
 
 ## Working with the pane
 
 The Familiar runs its native TUI in a real pane, not a log. Read along, type
 corrections, and answer its prompts directly. When it finishes it writes the
 complete result to a response file and says so in the pane. It makes every file
-change itself and keeps ordinary approvals; it may hand read-only lookups to
-cheaper headless helpers.
+change itself and inherits the permission defaults configured locally for its
+harness; it may hand read-only lookups to cheaper headless helpers.
 
 ## Spotting the session
 
@@ -63,4 +63,5 @@ same-day artifacts sort chronologically:
 ## Requirements
 
 Modern Linux with Bash, tmux, GNU core utilities, and the selected harness CLI
-(`codex` or `claude`) on `PATH`. macOS and Windows are currently untested.
+(`codex`, `claude`, `opencode`, or `agy`) on `PATH`. macOS and Windows are
+currently untested.

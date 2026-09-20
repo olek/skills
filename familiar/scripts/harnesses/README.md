@@ -1,38 +1,36 @@
 # Familiar harness definitions
 
 Each `*.sh` file in this directory is one drop-in Familiar harness. The file
-basename, without `.sh`, is the harness name. The shared loader discovers and
-sources every file in this directory, so adding a harness means adding one file
-and making no central registry edit.
+basename, without `.sh`, is the harness name. The shared loader discovers the
+files and sources only the selected harness, so adding one requires no central
+registry edit.
 
-Use the following namespaced functions as the definition contract, replacing
-`<name>` with the file basename:
+Each harness implements the same generic function contract:
 
 ```text
-familiar_harness_<name>_executable
-familiar_harness_<name>_models
-familiar_harness_<name>_efforts
-familiar_harness_<name>_supports_session_name
-familiar_harness_<name>_validate_effort <effort>
-familiar_harness_<name>_intent_model <planning|implementation|review>
-familiar_harness_<name>_intent_effort <planning|implementation|review>
-familiar_harness_<name>_build_command <cwd> <session_name> <prompt> <model> <effort> <status_line_config>
+familiar_harness_executable
+familiar_harness_models
+familiar_harness_efforts
+familiar_harness_intent_pair <planning|implementation|review>
+familiar_harness_build_command <cwd> <session_name> <prompt> <model> <effort> <status_line_config>
 ```
 
-The executable, models, efforts, session-name support flag, and intent
-suggestions are printed to standard output. Models and efforts are one entry per
-line. `validate_effort` returns success or failure and must not silently rewrite
-the supplied effort. `intent_model` and `intent_effort` return the model-effort
-pair for the requested intent. `build_command` prints the complete
-pane command and owns all harness-specific flags and environment prefixes.
+The executable, models, efforts, and intent suggestions are printed to standard
+output. Models and efforts are one entry per line. `intent_pair` returns the
+model and effort on one line, separated by one space. `build_command` prints the
+complete pane command and owns all harness-specific flags and environment
+prefixes.
+
+Either field in an intent pair may be `default`, meaning the caller omits that
+launcher option and lets the harness CLI use its configured default. This
+sentinel belongs only to intent pairs and must not appear in model or effort
+catalogs or be passed as an explicit launcher value.
 
 The caller always selects a harness explicitly. There is no registry default,
 and the summon launcher requires `--harness`, rejecting a missing or unknown
 value.
 
-The embedded model and effort catalog is informational and hand-maintained. It
-does not fetch or cache data at runtime. The launcher remains an opaque
-`--model` pass-through and does not translate model names between vendors.
-
-`opencode` and `antigravity` are planned drop-in harnesses; support is not yet
-implemented.
+Model and effort catalogs are informational and harness-owned. A definition may
+print a stable embedded list or delegate to its harness CLI when availability is
+configuration-dependent. The launcher remains an opaque `--model` pass-through
+and does not translate model names between vendors.
