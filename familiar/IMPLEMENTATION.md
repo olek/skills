@@ -8,35 +8,52 @@ truth; correct this file when they disagree.
 
 tmux is the substrate; the scripts are small and single-purpose:
 
-- **`scripts/familiar-paths.sh`** - source of truth for the Familiar home,
+- **`scripts/paths.sh`** - source of truth for the Familiar home,
   antechamber, `YYMMDD-HHMM` naming, bare-name validation, and
   session/request/response path derivation. Sourced by the other scripts or
   queried directly. Its `--request-path` query also creates the antechamber
   directory, so the caller writes the returned path without preparing a
   directory. `FAMILIAR_HOME` is the environment override.
-- **`scripts/summon-familiar.sh`** - validates name and inputs, captures the local
+- **`scripts/summon.sh`** - validates name and inputs, captures the local
   time to the minute, promotes the staged request to its durable path, derives the
   response path, enforces one Familiar per summoning agent, and opens the harness
   pane. On pane or metadata failure it closes the partial pane and restores the
   staged request when possible.
-- **`scripts/familiar-harness.sh`** - discovers harness definitions by scanning
-  `harnesses/*.sh` (no central list), loads the selected definition, and provides
-  the shell-quoting helper.
-- **`scripts/harnesses/*.sh`** - one self-contained definition per harness using
-  a shared generic interface: executable, embedded models and efforts, intent
+- **`scripts/message.sh`** - validates one message, resolves the live
+  managed Familiar associated with the current summoning pane from tmux metadata,
+  sends the text, waits a fixed 100 ms, and sends Enter as separate tmux
+  operations. It never waits for delivery or changes request, response, or
+  completion state.
+- **`scripts/dismiss.sh`** - resolves exactly one live managed Familiar
+  for the current summoning pane and closes it. It accepts no pane ID and rejects
+  zero, closed-only, or multiple live matches.
+- **`scripts/lib/pane.sh`** - source-only module for scoped managed-pane
+  lookup, single-live-pane resolution, and closing a resolved pane. Message and
+  dismissal share the strict resolution guard; status shares its lookup and close
+  operations while retaining its reporting semantics.
+- **`scripts/lib/harness.sh`** - source-only module that discovers
+  harness definitions by scanning `scripts/lib/harnesses/*.sh` (no central list),
+  loads the selected definition, and provides the shell-quoting helper.
+- **`scripts/lib/harnesses/*.sh`** - source-only definition per harness using a
+  shared generic interface: executable, embedded models and efforts, intent
   suggestions, and pane-command builder, per the contract in
-  `scripts/harnesses/README.md`. Add a harness by dropping in one file.
-- **`scripts/familiar-status.sh`** - finds the current agent's Familiar, derives
+  `scripts/lib/harnesses/README.md`. Add a harness by dropping in one file.
+- **`scripts/status.sh`** - finds the current agent's Familiar, derives
   paths from its pane metadata, and reports name, harness, pane, paths, and
   delivery state. `--wait` polls quietly until delivery or failure; `--auto-close`
   extends that one invocation (see below).
-- **`scripts/familiar-models.sh`** - prints a definition's models, efforts, or
-  intent suggestion. Each harness owns its catalog and may embed it or query its
-  CLI when availability depends on local configuration.
+- **`scripts/models.sh`** - prints only model IDs, one per line.
+- **`scripts/efforts.sh`** - prints only supported effort IDs, one per
+  line.
+- **`scripts/defaults.sh`** - prints exactly one named default pair for
+  a harness and intent as `model=<id>` and `effort=<id>`.
+- Each harness owns its catalogs and may embed them or query its CLI when
+  availability depends on local configuration.
 - **`tests/test-familiar.sh`** - exercises the scripts against a fake tmux and fake
   harness executables on `PATH`, asserting launch commands, catalog output, harness
-  discovery, derived paths, pane metadata, guard failures, and status/wait
-  reporting. It never touches a real tmux server.
+discovery, derived paths, pane metadata, guard failures, and status/wait
+reporting. It also covers message delivery, dismissal, and validation. It never
+touches a real tmux server.
 
 ## Naming and storage
 
@@ -79,7 +96,7 @@ and the user may override it. `--model` is optional and opaque, passed through
 unchanged; a user-specified model always wins, and model names are never
 translated between vendors. When no model is named, an intent - planning,
 implementation, or review - maps to a complete model-effort pair owned by the
-harness definition and returned by `familiar-models.sh`.
+harness definition and returned by `defaults.sh`.
 
 ## Pane metadata
 
@@ -114,9 +131,11 @@ process and does not touch the user's global Claude TUI preference.
 
 ## Auto-close inspection
 
-`--wait` alone is a plain completion wait. `--wait --auto-close` keeps the one
-status invocation alive after delivery for an inspection interval - 60 seconds by
-default, configurable via `FAMILIAR_AUTO_CLOSE_SECONDS` up to 60 - then closes the
-pane if it is still open, returning early if the pane disappears first.
-`--auto-close` takes no value and requires an explicit `--wait`. Handling it in
-one invocation avoids repeated status probes.
+`dismiss.sh` is the public action for immediate dismissal. It resolves
+the current summoner's one live managed Familiar and never accepts an arbitrary
+pane target. `--wait` alone is a plain completion wait. `--wait --auto-close`
+remains a status convenience: after delivery it keeps that invocation alive for
+an inspection interval - 60 seconds by default, configurable via
+`FAMILIAR_AUTO_CLOSE_SECONDS` up to 60 - then closes a remaining live scoped pane,
+returning early if none remains. `--auto-close` takes no value and requires an
+explicit `--wait`. Handling it in one invocation avoids repeated status probes.

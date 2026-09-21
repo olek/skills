@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
-# Exercise Familiar path handling, harness commands, launching, and status reporting.
+# Verify Familiar paths, catalogs, lifecycle, messaging, dismissal, and status.
 set -euo pipefail
 
 SKILL_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 readonly SKILL_ROOT
-readonly PATHS_SCRIPT="$SKILL_ROOT/scripts/familiar-paths.sh"
-readonly LAUNCHER="$SKILL_ROOT/scripts/summon-familiar.sh"
-readonly STATUS="$SKILL_ROOT/scripts/familiar-status.sh"
-readonly MODELS="$SKILL_ROOT/scripts/familiar-models.sh"
-readonly HARNESS_LOADER="$SKILL_ROOT/scripts/familiar-harness.sh"
+readonly PATHS_SCRIPT="$SKILL_ROOT/scripts/paths.sh"
+readonly LAUNCHER="$SKILL_ROOT/scripts/summon.sh"
+readonly MESSAGE="$SKILL_ROOT/scripts/message.sh"
+readonly DISMISS="$SKILL_ROOT/scripts/dismiss.sh"
+readonly STATUS="$SKILL_ROOT/scripts/status.sh"
+readonly MODELS="$SKILL_ROOT/scripts/models.sh"
+readonly EFFORTS="$SKILL_ROOT/scripts/efforts.sh"
+readonly DEFAULTS="$SKILL_ROOT/scripts/defaults.sh"
+readonly HARNESS_LOADER="$SKILL_ROOT/scripts/lib/harness.sh"
 TEST_ROOT=$(mktemp -d)
 readonly TEST_ROOT
 readonly FAKE_BIN="$TEST_ROOT/bin"
@@ -17,6 +21,9 @@ readonly FAKE_TMUX_CALLS="$TEST_ROOT/tmux-calls.log"
 readonly FAKE_TMUX_OPTIONS="$TEST_ROOT/tmux-options.tsv"
 readonly FAKE_TMUX_SPLIT_ARGS="$TEST_ROOT/split-args.txt"
 readonly FAKE_TMUX_LIST_COUNT="$TEST_ROOT/tmux-list-count.txt"
+readonly FAKE_TMUX_SEND_KEYS_ARGS="$TEST_ROOT/send-keys-args.txt"
+readonly FAKE_TMUX_SEND_KEYS_COUNT="$TEST_ROOT/send-keys-count.txt"
+readonly FAKE_SLEEP_ARGS="$TEST_ROOT/sleep-args.txt"
 readonly TEST_HOME="$TEST_ROOT/home"
 readonly DEFAULT_STORAGE="$TEST_HOME/.familiar"
 readonly DEFAULT_ANTECHAMBER="$DEFAULT_STORAGE/antechamber"
@@ -29,10 +36,11 @@ FAMILIAR_AUTO_CLOSE_SECONDS=''
 FAKE_TMUX_AUTO_CLOSE_ENABLED=0
 FAKE_TMUX_FAIL_COMMAND=''
 FAKE_TMUX_FAIL_SET_OPTION=''
+FAKE_TMUX_FAIL_SEND_KEYS=''
 trap 'rm -rf -- "$TEST_ROOT"' EXIT
 
 mkdir -p -- "$FAKE_BIN" "$TEST_HOME" "$DEFAULT_ANTECHAMBER" "$OVERRIDE_ANTECHAMBER"
-touch -- "$FAKE_TMUX_STATE" "$FAKE_TMUX_CALLS" "$FAKE_TMUX_OPTIONS" "$FAKE_TMUX_SPLIT_ARGS" "$FAKE_TMUX_LIST_COUNT"
+touch -- "$FAKE_TMUX_STATE" "$FAKE_TMUX_CALLS" "$FAKE_TMUX_OPTIONS" "$FAKE_TMUX_SPLIT_ARGS" "$FAKE_TMUX_LIST_COUNT" "$FAKE_TMUX_SEND_KEYS_ARGS" "$FAKE_TMUX_SEND_KEYS_COUNT" "$FAKE_SLEEP_ARGS"
 
 touch -- "$FAKE_BIN/codex" "$FAKE_BIN/claude"
 chmod +x -- "$FAKE_BIN/codex" "$FAKE_BIN/claude"
@@ -61,6 +69,20 @@ set -euo pipefail
 printf '%s\n' "$TEST_TIMESTAMP"
 FAKE_DATE
 chmod +x -- "$FAKE_BIN/date"
+
+cat > "$FAKE_BIN/sleep" <<'FAKE_SLEEP'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -n ${FAKE_SLEEP_ARGS:-} ]]; then
+  printf 'sleep\n' >> "$FAKE_TMUX_CALLS"
+  printf '%s\n' "$@" >> "$FAKE_SLEEP_ARGS"
+  exit 0
+fi
+
+exec /usr/bin/sleep "$@"
+FAKE_SLEEP
+chmod +x -- "$FAKE_BIN/sleep"
 
 cat > "$FAKE_BIN/tmux" <<'FAKE_TMUX'
 #!/usr/bin/env bash
@@ -104,6 +126,14 @@ case "$command_name" in
     target=${3:?}
     awk -F '\t' -v target="$target" '$1 != target' "$FAKE_TMUX_STATE" > "$FAKE_TMUX_STATE.tmp"
     mv -- "$FAKE_TMUX_STATE.tmp" "$FAKE_TMUX_STATE"
+    ;;
+  send-keys)
+    send_keys_count=$(<"$FAKE_TMUX_SEND_KEYS_COUNT")
+    send_keys_count=$((send_keys_count + 1))
+    printf '%s\n' "$send_keys_count" > "$FAKE_TMUX_SEND_KEYS_COUNT"
+    printf '%s\n' "$@" >> "$FAKE_TMUX_SEND_KEYS_ARGS"
+    printf '%s\n' 'END_CALL' >> "$FAKE_TMUX_SEND_KEYS_ARGS"
+    [[ ${FAKE_TMUX_FAIL_SEND_KEYS:-} != "$send_keys_count" ]] || exit 1
     ;;
   *)
     printf 'Unexpected fake tmux command: %s\n' "$command_name" >&2
@@ -155,11 +185,33 @@ assert_file_not_contains() {
   fi
 }
 
+assert_shell_purpose_comments() {
+  local shell_file
+  local shebang
+  local purpose_comment
+
+  while IFS= read -r shell_file; do
+    shebang=$(sed -n '1p' "$SKILL_ROOT/$shell_file")
+    purpose_comment=$(sed -n '2p' "$SKILL_ROOT/$shell_file")
+    [[ $shebang == '#!'* ]] || fail_test "expected a shebang in $shell_file"
+    [[ $purpose_comment == '# '* ]] || fail_test "expected a purpose comment after the shebang in $shell_file"
+  done < <(cd -- "$SKILL_ROOT" && rg --files -g '*.sh' | sort)
+}
+
 assert_no_split() {
   local split_count
   split_count=$(awk '$1 == "split-window" { count++ } END { print count + 0 }' "$FAKE_TMUX_CALLS")
   readonly split_count
   [[ $split_count == 0 ]] || fail_test "expected no split-window call, got $split_count"
+}
+
+assert_no_raw_tmux_examples() {
+  local -r file=$1
+  local raw_examples
+
+  if raw_examples=$(rg -n '^[[:space:]]*tmux[[:space:]]' "$file"); then
+    fail_test "did not expect raw tmux command examples in $file: $raw_examples"
+  fi
 }
 
 shell_quote() {
@@ -190,6 +242,9 @@ run_launcher() {
     FAKE_TMUX_SPLIT_ARGS="$FAKE_TMUX_SPLIT_ARGS" \
     FAKE_TMUX_FAIL_COMMAND="$FAKE_TMUX_FAIL_COMMAND" \
     FAKE_TMUX_FAIL_SET_OPTION="$FAKE_TMUX_FAIL_SET_OPTION" \
+    FAKE_TMUX_SEND_KEYS_ARGS="$FAKE_TMUX_SEND_KEYS_ARGS" \
+    FAKE_TMUX_SEND_KEYS_COUNT="$FAKE_TMUX_SEND_KEYS_COUNT" \
+    FAKE_TMUX_FAIL_SEND_KEYS="$FAKE_TMUX_FAIL_SEND_KEYS" \
     TEST_TIMESTAMP="$TIMESTAMP" \
     "$LAUNCHER" "$@"
 }
@@ -211,10 +266,52 @@ run_status() {
     "$STATUS" "$@"
 }
 
+run_message() {
+  env \
+    PATH="$FAKE_BIN:$PATH" \
+    HOME="$TEST_HOME" \
+    FAMILIAR_HOME="$FAMILIAR_HOME" \
+    TMUX=1 \
+    TMUX_PANE='%1' \
+    FAKE_TMUX_STATE="$FAKE_TMUX_STATE" \
+    FAKE_TMUX_CALLS="$FAKE_TMUX_CALLS" \
+    FAKE_TMUX_SEND_KEYS_ARGS="$FAKE_TMUX_SEND_KEYS_ARGS" \
+    FAKE_TMUX_SEND_KEYS_COUNT="$FAKE_TMUX_SEND_KEYS_COUNT" \
+    FAKE_TMUX_FAIL_SEND_KEYS="$FAKE_TMUX_FAIL_SEND_KEYS" \
+    FAKE_SLEEP_ARGS="$FAKE_SLEEP_ARGS" \
+    FAKE_TMUX_AUTO_CLOSE_ENABLED="$FAKE_TMUX_AUTO_CLOSE_ENABLED" \
+    "$MESSAGE" "$@"
+}
+
+run_dismiss() {
+  env \
+    PATH="$FAKE_BIN:$PATH" \
+    HOME="$TEST_HOME" \
+    FAMILIAR_HOME="$FAMILIAR_HOME" \
+    TMUX=1 \
+    TMUX_PANE='%1' \
+    FAKE_TMUX_STATE="$FAKE_TMUX_STATE" \
+    FAKE_TMUX_CALLS="$FAKE_TMUX_CALLS" \
+    FAKE_TMUX_AUTO_CLOSE_ENABLED="$FAKE_TMUX_AUTO_CLOSE_ENABLED" \
+    "$DISMISS" "$@"
+}
+
 run_models() {
   env \
     PATH="$FAKE_BIN:$PATH" \
     "$MODELS" "$@"
+}
+
+run_efforts() {
+  env \
+    PATH="$FAKE_BIN:$PATH" \
+    "$EFFORTS" "$@"
+}
+
+run_defaults() {
+  env \
+    PATH="$FAKE_BIN:$PATH" \
+    "$DEFAULTS" "$@"
 }
 
 request_path_for() {
@@ -240,7 +337,30 @@ reset_fake_tmux() {
   : > "$FAKE_TMUX_OPTIONS"
   : > "$FAKE_TMUX_SPLIT_ARGS"
   : > "$FAKE_TMUX_LIST_COUNT"
+  : > "$FAKE_TMUX_SEND_KEYS_ARGS"
+  : > "$FAKE_TMUX_SEND_KEYS_COUNT"
+  : > "$FAKE_SLEEP_ARGS"
+  printf '0\n' > "$FAKE_TMUX_SEND_KEYS_COUNT"
 }
+
+[[ -x $LAUNCHER ]] || fail_test 'expected the canonical Familiar summon script to be executable'
+assert_shell_purpose_comments
+[[ ! -e $SKILL_ROOT/scripts/summon-familiar.sh ]] || fail_test 'did not expect the old summon script name to remain'
+[[ -x $MESSAGE ]] || fail_test 'expected the Familiar message script to be executable'
+[[ -x $DISMISS ]] || fail_test 'expected the Familiar dismissal script to be executable'
+[[ -x $HARNESS_LOADER ]] || fail_test 'expected the source-only harness loader in scripts/lib'
+[[ ! -e $SKILL_ROOT/scripts/familiar-harness.sh ]] || fail_test 'did not expect the redundant root harness loader to remain'
+[[ ! -e $SKILL_ROOT/scripts/lib/familiar-harness.sh ]] || fail_test 'did not expect the redundant library harness name to remain'
+for redundant_script in familiar-defaults.sh familiar-dismiss.sh familiar-efforts.sh familiar-message.sh familiar-models.sh familiar-paths.sh familiar-status.sh familiar-summon.sh; do
+  [[ ! -e $SKILL_ROOT/scripts/$redundant_script ]] || fail_test "did not expect redundant script name to remain: $redundant_script"
+done
+[[ ! -e $SKILL_ROOT/scripts/lib/familiar-pane.sh ]] || fail_test 'did not expect the redundant library pane name to remain'
+[[ ! -d $SKILL_ROOT/scripts/harnesses ]] || fail_test 'expected the old harness directory to be moved'
+[[ -f $SKILL_ROOT/scripts/lib/harnesses/codex.sh ]] || fail_test 'expected the codex harness filename to remain unchanged'
+[[ ! -e $SKILL_ROOT/scripts/lib/harnesses/codex-lib.sh ]] || fail_test 'did not expect the superseded harness suffix'
+assert_file_contains "$SKILL_ROOT/SKILL.md" 'message.sh --message'
+assert_file_contains "$SKILL_ROOT/SKILL.md" 'dismiss.sh'
+assert_no_raw_tmux_examples "$SKILL_ROOT/SKILL.md"
 
 # Verify harness discovery and each harness's advertised launch choices.
 discovered_harnesses=$(bash -c 'source "$1"; familiar_harness_all' -- "$HARNESS_LOADER")
@@ -256,38 +376,38 @@ fi
 assert_contains "$unknown_harness_output" 'Unknown Familiar harness: unknown'
 
 harness_copy="$TEST_ROOT/harness-copy"
-mkdir -p -- "$harness_copy/harnesses"
-cp -- "$HARNESS_LOADER" "$harness_copy/familiar-harness.sh"
-cp -- "$SKILL_ROOT/scripts/harnesses/codex.sh" "$harness_copy/harnesses/codex.sh"
-cp -- "$SKILL_ROOT/scripts/harnesses/claude.sh" "$harness_copy/harnesses/claude.sh"
-cat > "$harness_copy/harnesses/scratch.sh" <<'SCRATCH_HARNESS'
+mkdir -p -- "$harness_copy/lib/harnesses"
+cp -- "$HARNESS_LOADER" "$harness_copy/lib/harness.sh"
+cp -- "$SKILL_ROOT/scripts/lib/harnesses/codex.sh" "$harness_copy/lib/harnesses/codex.sh"
+cp -- "$SKILL_ROOT/scripts/lib/harnesses/claude.sh" "$harness_copy/lib/harnesses/claude.sh"
+cat > "$harness_copy/lib/harnesses/scratch.sh" <<'SCRATCH_HARNESS'
 #!/usr/bin/env bash
 
 familiar_harness_executable() {
   printf 'scratch\n'
 }
 SCRATCH_HARNESS
-scratch_harnesses=$(bash -c 'source "$1"; familiar_harness_all' -- "$harness_copy/familiar-harness.sh")
+scratch_harnesses=$(bash -c 'source "$1"; familiar_harness_all' -- "$harness_copy/lib/harness.sh")
 assert_contains "$scratch_harnesses" 'scratch'
 loaded_codex_executable=$(
-  bash -c 'source "$1"; familiar_harness_load codex; familiar_harness_executable' -- "$harness_copy/familiar-harness.sh"
+  bash -c 'source "$1"; familiar_harness_load codex; familiar_harness_executable' -- "$harness_copy/lib/harness.sh"
 )
 assert_equals "$loaded_codex_executable" 'codex'
 loaded_scratch_executable=$(
-  bash -c 'source "$1"; familiar_harness_load scratch; familiar_harness_executable' -- "$harness_copy/familiar-harness.sh"
+  bash -c 'source "$1"; familiar_harness_load scratch; familiar_harness_executable' -- "$harness_copy/lib/harness.sh"
 )
 assert_equals "$loaded_scratch_executable" 'scratch'
 
 for default_intent_harness in opencode antigravity; do
   for intent in planning implementation review; do
-    assert_equals "$(run_models --harness "$default_intent_harness" --intent "$intent")" 'default default'
+    assert_equals "$(run_defaults --harness "$default_intent_harness" --intent "$intent")" $'model=default\neffort=default'
   done
 done
 
 opencode_models=$(run_models --harness opencode)
 assert_contains "$opencode_models" 'provider/opencode-test-model'
 opencode_efforts_output=''
-if opencode_efforts_output=$(run_models --harness opencode --efforts 2>&1); then
+if opencode_efforts_output=$(run_efforts --harness opencode 2>&1); then
   fail_test 'expected OpenCode effort discovery to report unsupported launch-time overrides'
 fi
 assert_contains "$opencode_efforts_output" 'does not support launch-time effort overrides'
@@ -301,31 +421,37 @@ fi
 assert_contains "$opencode_effort_command_output" 'does not support launch-time effort overrides'
 antigravity_models=$(run_models --harness antigravity)
 assert_contains "$antigravity_models" 'antigravity-test-model'
-antigravity_efforts=$(run_models --harness antigravity --efforts)
+antigravity_efforts=$(run_efforts --harness antigravity)
 assert_contains "$antigravity_efforts" 'high'
 
 codex_models=$(run_models --harness codex)
 assert_contains "$codex_models" 'gpt-5.6-luna'
 assert_not_contains "$codex_models" 'default'
-codex_efforts=$(run_models --harness codex --efforts)
+codex_efforts=$(run_efforts --harness codex)
 assert_contains "$codex_efforts" 'ultra'
 assert_not_contains "$codex_efforts" 'default'
-codex_planning_intent=$(run_models --harness codex --intent planning)
-assert_equals "$codex_planning_intent" 'gpt-5.6-sol medium'
+codex_planning_defaults=$(run_defaults --harness codex --intent planning)
+assert_equals "$codex_planning_defaults" $'model=gpt-5.6-sol\neffort=medium'
 claude_models=$(run_models --harness claude)
 assert_contains "$claude_models" 'sonnet'
-claude_efforts=$(run_models --harness claude --efforts)
+claude_efforts=$(run_efforts --harness claude)
 assert_not_contains "$claude_efforts" 'ultra'
-codex_implementation_intent=$(run_models --harness codex --intent implementation)
-assert_equals "$codex_implementation_intent" 'gpt-5.6-terra medium'
-codex_review_intent=$(run_models --harness codex --intent review)
-assert_equals "$codex_review_intent" 'gpt-5.6-sol medium'
-claude_planning_intent=$(run_models --harness claude --intent planning)
-assert_equals "$claude_planning_intent" 'opus medium'
-claude_implementation_intent=$(run_models --harness claude --intent implementation)
-assert_equals "$claude_implementation_intent" 'sonnet high'
-claude_review_intent=$(run_models --harness claude --intent review)
-assert_equals "$claude_review_intent" 'opus medium'
+codex_implementation_defaults=$(run_defaults --harness codex --intent implementation)
+assert_equals "$codex_implementation_defaults" $'model=gpt-5.6-terra\neffort=medium'
+codex_review_defaults=$(run_defaults --harness codex --intent review)
+assert_equals "$codex_review_defaults" $'model=gpt-5.6-sol\neffort=medium'
+claude_planning_defaults=$(run_defaults --harness claude --intent planning)
+assert_equals "$claude_planning_defaults" $'model=opus\neffort=medium'
+claude_implementation_defaults=$(run_defaults --harness claude --intent implementation)
+assert_equals "$claude_implementation_defaults" $'model=sonnet\neffort=high'
+claude_review_defaults=$(run_defaults --harness claude --intent review)
+assert_equals "$claude_review_defaults" $'model=opus\neffort=medium'
+
+legacy_models_output=''
+if legacy_models_output=$(run_models --harness codex --efforts 2>&1); then
+  fail_test 'expected the old multi-mode models contract to fail'
+fi
+assert_contains "$legacy_models_output" 'Unknown option: --efforts'
 
 # A managed Familiar pane's metadata, one row per pane:
 #   pane_id  familiar  bare_name  timestamp  harness  storage  summoner  pane_dead
@@ -569,6 +695,173 @@ FAKE_TMUX_FAIL_SET_OPTION=''
 [[ -f $metadata_failure_request ]] || fail_test 'expected metadata failure to restore the staged request'
 [[ ! -e $DEFAULT_STORAGE/$TIMESTAMP-fmrq-$metadata_failure_name.md ]] || fail_test 'expected no durable request after metadata failure'
 assert_file_contains "$FAKE_TMUX_CALLS" 'kill-pane'
+
+# Verify message delivery is scoped to the current summoning pane and sends text,
+# waits 100 ms, then submits Enter in a separate tmux operation.
+message_storage="$OVERRIDE_STORAGE"
+FAMILIAR_HOME="$message_storage"
+message_name='message-target'
+message_request=$(create_request "$message_name" "$message_storage")
+message_response=$(response_path_for "$message_name")
+message_text='-follow-up text'
+reset_fake_tmux
+write_pane '%20' '1' "$message_name" "$TIMESTAMP" codex "$message_storage" '%1' '0'
+write_pane '%21' '1' 'other-summoner-message' "$TIMESTAMP" codex "$message_storage" '%99' '0'
+write_pane '%22' '1' 'closed-message' "$TIMESTAMP" codex "$message_storage" '%1' '1'
+message_state_before=$(<"$FAKE_TMUX_STATE")
+message_output=$(run_message --message "$message_text")
+assert_contains "$message_output" "Sent message to Familiar $message_name in pane %20."
+expected_send_keys_args=$'send-keys\n-t\n%20\n-l\n--\n-follow-up text\nEND_CALL\nsend-keys\n-t\n%20\nC-m\nEND_CALL'
+assert_equals "$(<"$FAKE_TMUX_SEND_KEYS_ARGS")" "$expected_send_keys_args"
+assert_equals "$(<"$FAKE_SLEEP_ARGS")" '0.1'
+assert_equals "$(<"$FAKE_TMUX_CALLS")" $'list-panes\nsend-keys\nsleep\nsend-keys'
+assert_equals "$(<"$FAKE_TMUX_STATE")" "$message_state_before"
+[[ -f $message_request ]] || fail_test 'message delivery changed the request file'
+[[ ! -e $message_response ]] || fail_test 'message delivery created the response file'
+
+reset_fake_tmux
+write_pane '%23' '1' 'closed-only' "$TIMESTAMP" codex "$message_storage" '%1' '1'
+closed_output=''
+if closed_output=$(run_message --message 'hello' 2>&1); then
+  fail_test 'expected a message to fail when only closed Familiars exist'
+fi
+assert_contains "$closed_output" 'Only closed managed Familiars'
+assert_equals "$(<"$FAKE_TMUX_SEND_KEYS_ARGS")" ''
+
+reset_fake_tmux
+no_familiar_output=''
+if no_familiar_output=$(run_message --message 'hello' 2>&1); then
+  fail_test 'expected a message to fail when no Familiar exists'
+fi
+assert_contains "$no_familiar_output" 'No managed Familiar'
+assert_equals "$(<"$FAKE_TMUX_SEND_KEYS_ARGS")" ''
+
+reset_fake_tmux
+write_pane '%24' '1' 'first-live' "$TIMESTAMP" codex "$message_storage" '%1' '0'
+write_pane '%25' '1' 'second-live' "$TIMESTAMP" codex "$message_storage" '%1' '0'
+multiple_output=''
+if multiple_output=$(run_message --message 'hello' 2>&1); then
+  fail_test 'expected a message to fail when multiple live Familiars exist'
+fi
+assert_contains "$multiple_output" 'Multiple live managed Familiars'
+assert_equals "$(<"$FAKE_TMUX_SEND_KEYS_ARGS")" ''
+
+reset_fake_tmux
+write_pane '%26' '1' "$message_name" "$TIMESTAMP" codex "$message_storage" '%1' '0'
+FAKE_TMUX_FAIL_SEND_KEYS='1'
+first_send_failure_output=''
+if first_send_failure_output=$(run_message --message 'hello' 2>&1); then
+  fail_test 'expected the message to fail when text delivery fails'
+fi
+FAKE_TMUX_FAIL_SEND_KEYS=''
+assert_contains "$first_send_failure_output" 'Could not deliver the message'
+assert_equals "$(<"$FAKE_TMUX_SEND_KEYS_COUNT")" '1'
+
+reset_fake_tmux
+write_pane '%27' '1' "$message_name" "$TIMESTAMP" codex "$message_storage" '%1' '0'
+FAKE_TMUX_FAIL_SEND_KEYS='2'
+enter_failure_output=''
+if enter_failure_output=$(run_message --message 'hello' 2>&1); then
+  fail_test 'expected the message to fail when Enter delivery fails'
+fi
+FAKE_TMUX_FAIL_SEND_KEYS=''
+assert_contains "$enter_failure_output" 'the message may remain unsubmitted'
+assert_equals "$(<"$FAKE_TMUX_SEND_KEYS_COUNT")" '2'
+
+# Verify dismissal resolves only the current summoner's live Familiar and never
+# accepts an arbitrary pane target.
+dismiss_name='dismiss-target'
+reset_fake_tmux
+write_pane '%28' '1' "$dismiss_name" "$TIMESTAMP" codex "$message_storage" '%1' '0'
+write_pane '%29' '1' 'other-summoner-dismiss' "$TIMESTAMP" codex "$message_storage" '%99' '0'
+dismiss_output=$(run_dismiss)
+assert_contains "$dismiss_output" "Dismissed Familiar $dismiss_name in pane %28."
+assert_file_contains "$FAKE_TMUX_CALLS" 'kill-pane'
+assert_not_contains "$(<"$FAKE_TMUX_STATE")" '%28'
+assert_file_contains "$FAKE_TMUX_STATE" '%29'
+
+reset_fake_tmux
+write_pane '%30' '1' "$dismiss_name" "$TIMESTAMP" codex "$message_storage" '%1' '0'
+dismiss_state_before=$(<"$FAKE_TMUX_STATE")
+arbitrary_target_output=''
+if arbitrary_target_output=$(run_dismiss '%99' 2>&1); then
+  fail_test 'expected dismissal with an arbitrary pane target to fail'
+fi
+assert_contains "$arbitrary_target_output" 'Unknown option: %99'
+assert_equals "$(<"$FAKE_TMUX_STATE")" "$dismiss_state_before"
+assert_file_not_contains "$FAKE_TMUX_CALLS" 'kill-pane'
+
+reset_fake_tmux
+no_familiar_output=''
+if no_familiar_output=$(run_dismiss 2>&1); then
+  fail_test 'expected dismissal to fail when no Familiar exists'
+fi
+assert_contains "$no_familiar_output" 'No managed Familiar'
+assert_file_not_contains "$FAKE_TMUX_CALLS" 'kill-pane'
+
+reset_fake_tmux
+write_pane '%31' '1' 'closed-dismiss' "$TIMESTAMP" codex "$message_storage" '%1' '1'
+closed_dismiss_output=''
+if closed_dismiss_output=$(run_dismiss 2>&1); then
+  fail_test 'expected dismissal to fail when only closed Familiars exist'
+fi
+assert_contains "$closed_dismiss_output" 'Only closed managed Familiars'
+assert_file_not_contains "$FAKE_TMUX_CALLS" 'kill-pane'
+
+reset_fake_tmux
+write_pane '%32' '1' 'first-live-dismiss' "$TIMESTAMP" codex "$message_storage" '%1' '0'
+write_pane '%33' '1' 'second-live-dismiss' "$TIMESTAMP" codex "$message_storage" '%1' '0'
+multiple_dismiss_output=''
+if multiple_dismiss_output=$(run_dismiss 2>&1); then
+  fail_test 'expected dismissal to fail when multiple live Familiars exist'
+fi
+assert_contains "$multiple_dismiss_output" 'Multiple live managed Familiars'
+assert_file_not_contains "$FAKE_TMUX_CALLS" 'kill-pane'
+
+dismiss_help_output=$(run_dismiss --help 2>&1)
+assert_contains "$dismiss_help_output" 'Usage: dismiss.sh'
+
+message_help_output=$(run_message --help 2>&1)
+assert_contains "$message_help_output" 'Usage: message.sh --message <text>'
+for invalid_message_arguments in \
+  '' \
+  '--message' \
+  '--message one --message two' \
+  '--message one extra' \
+  '--unknown'; do
+  if [[ -z $invalid_message_arguments ]]; then
+    read -r -a invalid_message_argv <<< ''
+  else
+    read -r -a invalid_message_argv <<< "$invalid_message_arguments"
+  fi
+  if run_message "${invalid_message_argv[@]}" >/dev/null 2>&1; then
+    fail_test "expected invalid message arguments to fail: $invalid_message_arguments"
+  fi
+done
+
+tmux_validation_output=''
+if tmux_validation_output=$(env \
+  PATH="$FAKE_BIN:$PATH" \
+  HOME="$TEST_HOME" \
+  FAMILIAR_HOME="$message_storage" \
+  TMUX='' \
+  TMUX_PANE='%1' \
+  "$MESSAGE" --message hello 2>&1); then
+  fail_test 'expected message delivery outside tmux to fail'
+fi
+assert_contains "$tmux_validation_output" 'must run inside tmux'
+
+tmux_validation_output=''
+if tmux_validation_output=$(env \
+  PATH="$FAKE_BIN:$PATH" \
+  HOME="$TEST_HOME" \
+  FAMILIAR_HOME="$message_storage" \
+  TMUX=1 \
+  TMUX_PANE='' \
+  "$MESSAGE" --message hello 2>&1); then
+  fail_test 'expected message delivery without a tmux pane to fail'
+fi
+assert_contains "$tmux_validation_output" 'must run from a tmux pane'
 
 # Verify reporting, waiting, and auto-close states across managed panes.
 status_storage="$OVERRIDE_STORAGE"

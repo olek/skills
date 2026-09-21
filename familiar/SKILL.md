@@ -39,7 +39,7 @@ The public identifier is a bare lowercase kebab-case name, e.g.
 do not create any directory yourself:
 
 ```bash
-request_path=$(<skill-dir>/scripts/familiar-paths.sh --request-path --name <bare-familiar-name>)
+request_path=$(<skill-dir>/scripts/paths.sh --request-path --name <bare-familiar-name>)
 ```
 
 If that path already exists, stop and report it as a staging collision; do not
@@ -58,7 +58,7 @@ one, pass the harness you run in (`claude` or `codex`) - the launcher cannot
 infer it.
 
 ```bash
-<skill-dir>/scripts/summon-familiar.sh \
+<skill-dir>/scripts/summon.sh \
   --name <bare-familiar-name> \
   --cwd /absolute/path/to/project \
   --harness codex|claude|opencode|antigravity \
@@ -79,21 +79,21 @@ without an effort, do not invent one the model may not support.
 Query the selected harness catalogs:
 
 ```bash
-<skill-dir>/scripts/familiar-models.sh --harness <harness>
-<skill-dir>/scripts/familiar-models.sh --harness <harness> --efforts
-<skill-dir>/scripts/familiar-models.sh --harness <harness> --intent <planning|implementation|review>
+<skill-dir>/scripts/models.sh --harness <harness>
+<skill-dir>/scripts/efforts.sh --harness <harness>
+<skill-dir>/scripts/defaults.sh --harness <harness> --intent <planning|implementation|review>
 ```
 
 When the user names no model, pick the intent (planning, implementation, or
-review), query it, and use the complete model-effort pair returned - they are one
-inseparable pair; do not detach the effort as a general recommendation. An
-intent pair may use `default` for either field. Omit the corresponding `--model`
-or `--effort` launcher option; never pass `default` as its value.
+review), query `defaults.sh`, and use its named `model=<id>` and
+`effort=<id>` pair together. An intent pair may use `default` for either field.
+Omit the corresponding `--model` or `--effort` launcher option; never pass
+`default` as its value.
 
 ## Check status and follow up
 
 ```bash
-<skill-dir>/scripts/familiar-status.sh
+<skill-dir>/scripts/status.sh
 ```
 
 Reports the Familiar tied to the current summoning agent - its harness, pane,
@@ -101,14 +101,21 @@ request and response paths, and delivery state - so you need not pass an
 identifier.
 
 After summoning, if nothing follows up, do nothing. To wait for completion,
-invoke `familiar-status.sh --wait` once and wait for its result. Add
-`--auto-close` when you want the pane to close itself once the work is delivered;
-omit it to leave the pane open for the user. Do not repeatedly probe status.
+invoke `status.sh --wait` once and wait for its result. Add
+`--auto-close` when you want that wait to close a remaining live pane after its
+inspection interval; omit it to leave the pane open for the user. Do not
+repeatedly probe status.
 
-For a follow-up, send text and Enter as separate tmux calls; combining them can
-leave the text unexecuted in the prompt:
+For a follow-up, use the message wrapper:
 
 ```bash
-tmux send-keys -t <pane-id> 'follow-up text'
-tmux send-keys -t <pane-id> C-m
+<skill-dir>/scripts/message.sh --message 'follow-up text'
+```
+
+To dismiss the current summoning agent's one live Familiar, use the dismissal
+wrapper. It accepts no pane ID and rejects zero, closed-only, or multiple live
+matches.
+
+```bash
+<skill-dir>/scripts/dismiss.sh
 ```

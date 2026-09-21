@@ -15,11 +15,11 @@ familiar_harness_intent_pair <planning|implementation|review>
 familiar_harness_build_command <cwd> <session_name> <prompt> <model> <effort> <status_line_config>
 ```
 
-The executable, models, efforts, and intent suggestions are printed to standard
-output. Models and efforts are one entry per line. `intent_pair` returns the
-model and effort on one line, separated by one space. `build_command` prints the
-complete pane command and owns all harness-specific flags and environment
-prefixes.
+The executable, models, and efforts are printed to standard output. Models and
+efforts are one entry per line. `intent_pair` returns the model and effort on
+one line, separated by one space, for the defaults CLI to name. `build_command`
+prints the complete pane command and owns all harness-specific flags and
+environment prefixes.
 
 Either field in an intent pair may be `default`, meaning the caller omits that
 launcher option and lets the harness CLI use its configured default. This

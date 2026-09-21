@@ -152,6 +152,7 @@ familiar_paths_main() {
     esac
   done
 
+  readonly output_kind familiar_name
   [[ -n $output_kind ]] || {
     familiar_paths_usage
     familiar_paths_fail 'An output option is required.'

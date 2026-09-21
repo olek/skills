@@ -29,9 +29,9 @@ readonly FAMILIAR_SUMMONER_PANE_OPTION='@familiar_summoner_pane'
 readonly FAMILIAR_STATUS_LINE_CONFIG='tui.status_line=["model-with-reasoning","approval-mode","context-used","context-window-size"]'
 
 # shellcheck disable=SC1091
-source "$SCRIPT_DIRECTORY/familiar-paths.sh"
+source "$SCRIPT_DIRECTORY/paths.sh"
 # shellcheck disable=SC1091
-source "$SCRIPT_DIRECTORY/familiar-harness.sh"
+source "$SCRIPT_DIRECTORY/lib/harness.sh"
 
 usage() {
   printf 'Usage: %s --name <bare-familiar-name> --cwd <absolute-project-directory> --harness <harness> [--model <target-harness-model>] [--effort <target-harness-effort>]\n' "$PROGRAM_NAME" >&2

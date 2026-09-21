@@ -34,6 +34,22 @@ complete result to a response file and says so in the pane. It makes every file
 change itself and inherits the permission defaults configured locally for its
 harness; it may hand read-only lookups to cheaper headless helpers.
 
+The public wrappers are `scripts/summon.sh` for launching,
+`scripts/status.sh` for delivery state, `scripts/message.sh` for follow-ups,
+and `scripts/dismiss.sh` for dismissal. The follow-up and dismissal
+wrappers resolve the managed pane from tmux metadata, so they do not accept an
+arbitrary pane target.
+
+Check delivery with `scripts/status.sh`. To wait for completion, invoke
+`scripts/status.sh --wait` once; add `--auto-close` to close a remaining live
+pane after its inspection interval.
+
+Send a follow-up with `scripts/message.sh --message '<text>'`. It
+requires exactly one live managed Familiar for the current summoning pane.
+
+Dismiss that Familiar with `scripts/dismiss.sh`. It accepts no pane ID
+and rejects zero, closed-only, or multiple live matches.
+
 ## Spotting the session
 
 A Claude Familiar launches with a readable session name (`YYMMDD-HHMM-fm-<name>`),

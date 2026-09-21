@@ -23,9 +23,11 @@ readonly DEFAULT_AUTO_CLOSE_SECONDS=60
 readonly AUTO_CLOSE_POLL_INTERVAL_SECONDS=1
 
 # shellcheck disable=SC1091
-source "$SCRIPT_DIRECTORY/familiar-paths.sh"
+source "$SCRIPT_DIRECTORY/paths.sh"
 # shellcheck disable=SC1091
-source "$SCRIPT_DIRECTORY/familiar-harness.sh"
+source "$SCRIPT_DIRECTORY/lib/harness.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIRECTORY/lib/pane.sh"
 
 usage() {
   printf 'Usage: %s [--wait] [--timeout <seconds>] [--auto-close]\n' "${0##*/}" >&2
@@ -106,23 +108,6 @@ parse_arguments() {
   (( ! auto_close_enabled_ref || wait_option_seen_ref )) || fail '--auto-close requires --wait; use --wait --auto-close.'
 }
 
-managed_familiar_rows() {
-  local -r summoner_pane=$1
-
-  # Each row contains pane ID, name, timestamp, harness, home, and dead flag.
-  # A pane with no recorded harness is reported as "unknown"; the launcher
-  # always records one, so this only guards against missing metadata.
-  tmux list-panes -a -F $'#{pane_id}\t#{@familiar}\t#{@familiar_name}\t#{@familiar_timestamp}\t#{@familiar_harness}\t#{@familiar_home}\t#{@familiar_summoner_pane}\t#{pane_dead}' \
-    | awk -F '\t' -v summoner="$summoner_pane" '
-      $2 == "1" && $7 == summoner {
-        harness = $5
-        if (harness == "") {
-          harness = "unknown"
-        }
-        printf "%s\t%s\t%s\t%s\t%s\t%s\n", $1, $3, $4, harness, $6, $8
-      }'
-}
-
 derive_paths() {
   local -r familiar_timestamp=$1
   local -r familiar_name=$2
@@ -177,7 +162,7 @@ report_familiars() {
         "$familiar_name" "$familiar_harness" "$pane_id" "$(response_status "$response_file")"
     fi
     printf '  request: %s\n  response: %s\n' "$request_file" "$response_file"
-  done < <(managed_familiar_rows "$summoner_pane")
+  done < <(familiar_managed_rows "$summoner_pane")
 
   if (( ! has_managed_familiar )); then
     printf 'No managed Familiar exists for this summoning agent instance.\n'
@@ -216,7 +201,7 @@ completion_state() {
     else
       has_pending_response=1
     fi
-  done < <(managed_familiar_rows "$summoner_pane")
+  done < <(familiar_managed_rows "$summoner_pane")
 
   if (( ! has_managed_familiar )); then
     printf 'no-familiar'
@@ -232,7 +217,7 @@ completion_state() {
 open_familiar_pane_id() {
   local -r summoner_pane=$1
 
-  managed_familiar_rows "$summoner_pane" \
+  familiar_managed_rows "$summoner_pane" \
     | awk -F '\t' '$6 != "1" { print $1; exit }'
 }
 
@@ -253,7 +238,7 @@ wait_for_auto_close() {
 
     remaining_seconds=$((inspection_seconds - (SECONDS - started_at_seconds)))
     if (( remaining_seconds <= 0 )); then
-      if tmux kill-pane -t "$pane_id"; then
+      if familiar_close_pane "$pane_id"; then
         printf 'Auto-closed Familiar pane %s after %s seconds of user inspection.\n' "$pane_id" "$inspection_seconds"
       else
         printf 'Auto-close ended: the Familiar pane was already closed.\n'
@@ -324,6 +309,7 @@ main() {
   if (( auto_close_enabled )); then
     auto_close_seconds=$(normalize_auto_close_seconds "$auto_close_seconds" 'FAMILIAR_AUTO_CLOSE_SECONDS')
   fi
+  readonly should_wait timeout_seconds auto_close_enabled auto_close_seconds
   [[ -n ${TMUX:-} ]] || fail 'This status command must run inside tmux.'
   [[ -n ${TMUX_PANE:-} ]] || fail 'This status command must run from a tmux pane.'
   if (( should_wait )); then

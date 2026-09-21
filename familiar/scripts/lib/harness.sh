@@ -42,13 +42,12 @@ familiar_harness_is_known() {
 
 familiar_harness_load() {
   local -r harness=${1:-}
-  local harness_file
 
   familiar_harness_is_known "$harness" || {
     printf 'Unknown Familiar harness: %s\n' "$harness" >&2
     return 1
   }
-  harness_file="$FAMILIAR_HARNESS_DIRECTORY/$harness.sh"
+  local -r harness_file="$FAMILIAR_HARNESS_DIRECTORY/$harness.sh"
   # shellcheck disable=SC1090
   source "$harness_file"
 }

@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
-# Antigravity Familiar harness definition.
+# OpenCode Familiar harness definition.
 
 familiar_harness_executable() {
-  printf 'agy\n'
+  printf 'opencode\n'
 }
 
 familiar_harness_models() {
-  agy models
+  opencode models
 }
 
 familiar_harness_efforts() {
-  printf '%s\n' low medium high
+  printf 'OpenCode TUI does not support launch-time effort overrides.\n' >&2
+  return 1
 }
 
 familiar_harness_intent_pair() {
+  local -r intent=${1:-}
+
   # Placeholder until harness-specific intent model-effort pairs are known.
-  case "${1:-}" in
+  case "$intent" in
     planning|implementation|review)
       printf 'default default\n'
       ;;
@@ -32,15 +35,16 @@ familiar_harness_build_command() {
   local -r model=$4
   local -r effort=$5
   local -r status_line_config=$6
-  local command='exec agy'
+  local command='exec opencode'
 
   : "$working_directory" "$session_name" "$status_line_config"
+  if [[ -n $effort ]]; then
+    printf 'OpenCode TUI does not support launch-time effort overrides.\n' >&2
+    return 1
+  fi
   if [[ -n $model ]]; then
     printf -v command '%s --model %s' "$command" "$(shell_quote "$model")"
   fi
-  if [[ -n $effort ]]; then
-    printf -v command '%s --effort %s' "$command" "$(shell_quote "$effort")"
-  fi
-  printf -v command '%s --prompt-interactive %s' "$command" "$(shell_quote "$familiar_prompt")"
+  printf -v command '%s --prompt %s' "$command" "$(shell_quote "$familiar_prompt")"
   printf '%s' "$command"
 }
