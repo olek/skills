@@ -13,6 +13,8 @@ readonly MODELS="$SKILL_ROOT/scripts/models.sh"
 readonly EFFORTS="$SKILL_ROOT/scripts/efforts.sh"
 readonly DEFAULTS="$SKILL_ROOT/scripts/defaults.sh"
 readonly HARNESS_LOADER="$SKILL_ROOT/scripts/lib/harness.sh"
+readonly BACKEND_LOADER="$SKILL_ROOT/scripts/lib/backend.sh"
+readonly FAMILIAR_POLICY="$SKILL_ROOT/scripts/lib/familiar.sh"
 TEST_ROOT=$(mktemp -d)
 readonly TEST_ROOT
 readonly FAKE_BIN="$TEST_ROOT/bin"
@@ -245,6 +247,7 @@ run_launcher() {
     FAKE_TMUX_SEND_KEYS_ARGS="$FAKE_TMUX_SEND_KEYS_ARGS" \
     FAKE_TMUX_SEND_KEYS_COUNT="$FAKE_TMUX_SEND_KEYS_COUNT" \
     FAKE_TMUX_FAIL_SEND_KEYS="$FAKE_TMUX_FAIL_SEND_KEYS" \
+    FAKE_TMUX_AUTO_CLOSE_ENABLED="$FAKE_TMUX_AUTO_CLOSE_ENABLED" \
     TEST_TIMESTAMP="$TIMESTAMP" \
     "$LAUNCHER" "$@"
 }
@@ -349,18 +352,54 @@ assert_shell_purpose_comments
 [[ -x $MESSAGE ]] || fail_test 'expected the Familiar message script to be executable'
 [[ -x $DISMISS ]] || fail_test 'expected the Familiar dismissal script to be executable'
 [[ -x $HARNESS_LOADER ]] || fail_test 'expected the source-only harness loader in scripts/lib'
+[[ -f $BACKEND_LOADER ]] || fail_test 'expected the source-only backend loader in scripts/lib'
+[[ -f $FAMILIAR_POLICY ]] || fail_test 'expected the generic Familiar policy in scripts/lib'
 [[ ! -e $SKILL_ROOT/scripts/familiar-harness.sh ]] || fail_test 'did not expect the redundant root harness loader to remain'
 [[ ! -e $SKILL_ROOT/scripts/lib/familiar-harness.sh ]] || fail_test 'did not expect the redundant library harness name to remain'
 for redundant_script in familiar-defaults.sh familiar-dismiss.sh familiar-efforts.sh familiar-message.sh familiar-models.sh familiar-paths.sh familiar-status.sh familiar-summon.sh; do
   [[ ! -e $SKILL_ROOT/scripts/$redundant_script ]] || fail_test "did not expect redundant script name to remain: $redundant_script"
 done
 [[ ! -e $SKILL_ROOT/scripts/lib/familiar-pane.sh ]] || fail_test 'did not expect the redundant library pane name to remain'
+[[ ! -e $SKILL_ROOT/scripts/lib/pane.sh ]] || fail_test 'did not expect the tmux-coupled pane helper to remain'
+[[ ! -e $SKILL_ROOT/scripts/lib/target.sh ]] || fail_test 'did not expect the superseded lifecycle helper to remain'
 [[ ! -d $SKILL_ROOT/scripts/harnesses ]] || fail_test 'expected the old harness directory to be moved'
 [[ -f $SKILL_ROOT/scripts/lib/harnesses/codex.sh ]] || fail_test 'expected the codex harness filename to remain unchanged'
 [[ ! -e $SKILL_ROOT/scripts/lib/harnesses/codex-lib.sh ]] || fail_test 'did not expect the superseded harness suffix'
 assert_file_contains "$SKILL_ROOT/SKILL.md" 'message.sh --message'
 assert_file_contains "$SKILL_ROOT/SKILL.md" 'dismiss.sh'
 assert_no_raw_tmux_examples "$SKILL_ROOT/SKILL.md"
+
+# Generic lifecycle policy is tested against a backend double. Adapter command
+# checks below retain coverage for tmux metadata and delivery mechanics.
+generic_policy_output=$(FAKE_FAMILIAR_ROWS=$'familiar-1\tfake-familiar\tstamp\tcodex\thome\t0' bash -c '
+  set -euo pipefail
+  familiar_backend_list_familiars() {
+    printf "%s\\n" "$FAKE_FAMILIAR_ROWS"
+  }
+  familiar_backend_close_familiar() {
+    printf "closed:%s\\n" "$1"
+  }
+  source "$1"
+  name=""
+  familiar=""
+  familiar_resolve_live_familiar name familiar summoner
+  printf "resolved:%s:%s\\n" "$name" "$familiar"
+  familiar_close_familiar "$familiar"
+' -- "$FAMILIAR_POLICY" \
+  2>&1) || fail_test 'expected generic Familiar policy to resolve a fake Familiar'
+assert_equals "$generic_policy_output" $'resolved:fake-familiar:familiar-1\nclosed:familiar-1'
+
+generic_multiple_output=''
+if generic_multiple_output=$(FAKE_FAMILIAR_ROWS=$'familiar-1\tfirst\tstamp\tcodex\thome\t0\nfamiliar-2\tsecond\tstamp\tcodex\thome\t0' bash -c '
+  set -euo pipefail
+  familiar_backend_list_familiars() { printf "%s\\n" "$FAKE_FAMILIAR_ROWS"; }
+  source "$1"
+  name=""; familiar=""
+  familiar_resolve_live_familiar name familiar summoner
+' -- "$FAMILIAR_POLICY" 2>&1); then
+  fail_test 'expected generic Familiar policy to reject multiple live Familiars'
+fi
+assert_contains "$generic_multiple_output" 'Multiple live managed Familiars are associated with summoner summoner.'
 
 # Verify harness discovery and each harness's advertised launch choices.
 discovered_harnesses=$(bash -c 'source "$1"; familiar_harness_all' -- "$HARNESS_LOADER")

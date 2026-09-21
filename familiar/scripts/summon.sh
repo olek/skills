@@ -8,30 +8,26 @@
 # explicit and independent of the summoning agent. One managed Familiar is
 # allowed per summoning agent instance.
 #
-# Run this only from the pane that requested the Familiar, with a bare
+# Run this only from the terminal that requested the Familiar, with a bare
 # --name, an absolute --cwd path, a required --harness, and optional
 # model/effort settings.
-# TMUX_PANE is intentionally used as the target rather than tmux's active
-# client/window.  Consequently, if the user switches windows or sessions while
-# the Familiar is being prepared, it still opens in the requesting pane's
-# window.
+# The backend supplies a stable summoner identity, so moving between
+# terminal views while a Familiar is prepared does not redirect the launch.
 set -euo pipefail
 
 readonly PROGRAM_NAME="${0##*/}"
 SCRIPT_DIRECTORY=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 readonly SCRIPT_DIRECTORY
-readonly FAMILIAR_OPTION='@familiar'
-readonly FAMILIAR_NAME_OPTION='@familiar_name'
-readonly FAMILIAR_TIMESTAMP_OPTION='@familiar_timestamp'
-readonly FAMILIAR_HARNESS_OPTION='@familiar_harness'
-readonly FAMILIAR_HOME_OPTION='@familiar_home'
-readonly FAMILIAR_SUMMONER_PANE_OPTION='@familiar_summoner_pane'
 readonly FAMILIAR_STATUS_LINE_CONFIG='tui.status_line=["model-with-reasoning","approval-mode","context-used","context-window-size"]'
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIRECTORY/paths.sh"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIRECTORY/lib/harness.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIRECTORY/lib/backend.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIRECTORY/lib/familiar.sh"
 
 usage() {
   printf 'Usage: %s --name <bare-familiar-name> --cwd <absolute-project-directory> --harness <harness> [--model <target-harness-model>] [--effort <target-harness-effort>]\n' "$PROGRAM_NAME" >&2
@@ -99,8 +95,7 @@ validate_inputs() {
   local -r model=$4
   local -r effort=$5
 
-  [[ -n ${TMUX:-} ]] || fail 'This launcher must run inside tmux.'
-  [[ -n ${TMUX_PANE:-} ]] || fail 'This launcher must run from a tmux pane.'
+  familiar_backend_require_context || exit 1
   [[ -n $familiar_name && -n $working_directory && -n $harness ]] || {
     usage
     fail 'The --name, --cwd, and --harness options are required.'
@@ -174,8 +169,9 @@ resolve_paths() {
 }
 
 ensure_no_managed_familiar() {
-  if tmux list-panes -a -F $'#{@familiar}\t#{@familiar_summoner_pane}' \
-    | awk -F '\t' -v summoner="$TMUX_PANE" '$1 == "1" && $2 == summoner { found = 1 } END { exit found ? 0 : 1 }'; then
+  local -r summoner_id=$1
+
+  if familiar_managed_familiars "$summoner_id" | awk 'NF { found = 1 } END { exit found ? 0 : 1 }'; then
     fail 'This summoning agent instance already has a managed Familiar; close it before summoning another.'
   fi
 }
@@ -186,34 +182,6 @@ build_familiar_prompt() {
 
   printf 'Read and follow the request at %s. The resolved response path is %s. Work only within its stated scope. Do not create %s until the result is complete; then write the complete result there in a single write and state completion in this Familiar session. You may delegate read-only work (research, reading, checks) to headless sub-agents (cheaper models are fine), but make every file change yourself.' \
     "$request_file" "$response_file" "$response_file"
-}
-
-launch_familiar() {
-  local -r working_directory=$1
-  local -r pane_command=$2
-  local -r familiar_name=$3
-  local -r familiar_timestamp=$4
-  local -r harness=$5
-  local -r storage_directory=$6
-  local window_id
-  local pane_id
-
-  window_id=$(tmux display-message -p -t "$TMUX_PANE" '#{window_id}')
-  readonly window_id
-  if ! pane_id=$(tmux split-window -h -c "$working_directory" -t "$window_id" -P -F '#{pane_id}' "$pane_command"); then
-    return 1
-  fi
-  readonly pane_id
-  if ! tmux set-option -p -t "$pane_id" "$FAMILIAR_NAME_OPTION" "$familiar_name" \
-    || ! tmux set-option -p -t "$pane_id" "$FAMILIAR_TIMESTAMP_OPTION" "$familiar_timestamp" \
-    || ! tmux set-option -p -t "$pane_id" "$FAMILIAR_HARNESS_OPTION" "$harness" \
-    || ! tmux set-option -p -t "$pane_id" "$FAMILIAR_HOME_OPTION" "$storage_directory" \
-    || ! tmux set-option -p -t "$pane_id" "$FAMILIAR_SUMMONER_PANE_OPTION" "$TMUX_PANE" \
-    || ! tmux set-option -p -t "$pane_id" "$FAMILIAR_OPTION" 1; then
-    tmux kill-pane -t "$pane_id" >/dev/null 2>&1 || true
-    return 1
-  fi
-  printf '%s\n' "$pane_id"
 }
 
 main() {
@@ -230,37 +198,40 @@ main() {
   local working_directory
   local storage_directory
   local familiar_prompt
-  local pane_command
+  local familiar_command
+  local summoner_id
 
   parse_arguments familiar_name_input working_directory_input harness model effort "$@"
   readonly familiar_name_input working_directory_input harness model effort
   validate_inputs "$familiar_name_input" "$working_directory_input" "$harness" "$model" "$effort"
+  summoner_id=$(familiar_backend_summoner_id)
+  readonly summoner_id
   familiar_timestamp=$(familiar_current_timestamp)
   readonly familiar_timestamp
   session_name=$(familiar_session_name "$familiar_timestamp" "$familiar_name_input")
   readonly session_name
   resolve_paths staged_request_file request_file response_file working_directory storage_directory "$familiar_timestamp" "$familiar_name_input" "$working_directory_input"
   readonly staged_request_file request_file response_file working_directory storage_directory
-  ensure_no_managed_familiar
+  ensure_no_managed_familiar "$summoner_id"
 
   familiar_prompt=$(build_familiar_prompt "$request_file" "$response_file")
   readonly familiar_prompt
-  pane_command=$(familiar_harness_build_command "$working_directory" "$session_name" "$familiar_prompt" "$model" "$effort" "$FAMILIAR_STATUS_LINE_CONFIG")
-  readonly pane_command
+  familiar_command=$(familiar_harness_build_command "$working_directory" "$session_name" "$familiar_prompt" "$model" "$effort" "$FAMILIAR_STATUS_LINE_CONFIG")
+  readonly familiar_command
 
   # Promotion is the durable handoff boundary. Restore the staged request if
-  # pane creation or metadata setup fails so the caller can safely retry.
+  # Familiar creation or metadata setup fails so the caller can safely retry.
   mv --no-clobber -- "$staged_request_file" "$request_file" || fail "Could not promote staged request: $staged_request_file"
   [[ ! -e $staged_request_file ]] || fail "Request path already exists; staged request was preserved: $request_file"
-  local pane_id
-  if ! pane_id=$(launch_familiar "$working_directory" "$pane_command" "$familiar_name_input" "$familiar_timestamp" "$harness" "$storage_directory"); then
+  local familiar_id
+  if ! familiar_id=$(familiar_backend_launch_familiar "$summoner_id" "$working_directory" "$familiar_command" "$familiar_name_input" "$familiar_timestamp" "$harness" "$storage_directory"); then
     if [[ ! -e $staged_request_file ]] && mv --no-clobber -- "$request_file" "$staged_request_file"; then
       fail "Could not launch the Familiar; restored the staged request: $staged_request_file"
     fi
     fail "Could not launch the Familiar; recover the request from: $request_file"
   fi
-  readonly pane_id
-  printf '%s\n' "$pane_id"
+  readonly familiar_id
+  printf '%s\n' "$familiar_id"
   printf 'request: %s\nresponse: %s\n' "$request_file" "$response_file"
 }
 

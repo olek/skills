@@ -2,12 +2,12 @@
 # Report the Familiar managed by the current summoning agent instance.
 #
 # The launcher stores the name, launch timestamp, harness, canonical Familiar
-# home, and summoning pane on the Familiar pane. This script derives the
+# home, and summoner on the Familiar. This script derives the
 # request and response paths and reports delivery or termination state.
 #
-# Run this from the summoning agent's pane. It uses TMUX_PANE as the stable
-# identity of that agent instance, so moving between windows does not redirect
-# the query. By default it reports immediately. Use --wait [--timeout <seconds>]
+# Run this from the summoning agent's terminal. The backend supplies its stable
+# identity, so moving between terminal views does not redirect the query. By
+# default it reports immediately. Use --wait [--timeout <seconds>]
 # to wait quietly for a response; the default timeout is ten minutes.  Add
 # --auto-close to keep waiting in the same invocation after delivery for a
 # configurable inspection interval (60 seconds by default), closing the Familiar
@@ -27,7 +27,9 @@ source "$SCRIPT_DIRECTORY/paths.sh"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIRECTORY/lib/harness.sh"
 # shellcheck disable=SC1091
-source "$SCRIPT_DIRECTORY/lib/pane.sh"
+source "$SCRIPT_DIRECTORY/lib/backend.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIRECTORY/lib/familiar.sh"
 
 usage() {
   printf 'Usage: %s [--wait] [--timeout <seconds>] [--auto-close]\n' "${0##*/}" >&2
@@ -124,45 +126,45 @@ derive_paths() {
 report_invalid_metadata() {
   local -r familiar_name=$1
   local -r familiar_harness=$2
-  local -r pane_id=$3
+  local -r familiar_id=$3
 
   printf 'Managed Familiar: %s (%s, pane %s, invalid metadata)\n' \
-    "$familiar_name" "$familiar_harness" "$pane_id"
+    "$familiar_name" "$familiar_harness" "$familiar_id"
   printf '  request: unavailable\n  response: unavailable\n'
 }
 
 report_familiars() {
-  local -r summoner_pane=$1
-  local pane_id
+  local -r summoner_id=$1
+  local familiar_id
   local familiar_name
   local familiar_timestamp
   local familiar_harness
   local storage_directory
-  local pane_dead
+  local familiar_closed
   local request_file
   local response_file
   local derived_paths
   local has_managed_familiar=0
 
-  while IFS=$'\t' read -r pane_id familiar_name familiar_timestamp familiar_harness storage_directory pane_dead; do
-    [[ $pane_id ]] || continue
+  while IFS=$'\t' read -r familiar_id familiar_name familiar_timestamp familiar_harness storage_directory familiar_closed; do
+    [[ $familiar_id ]] || continue
     has_managed_familiar=1
 
     if ! derived_paths=$(derive_paths "$familiar_timestamp" "$familiar_name" "$storage_directory"); then
-      report_invalid_metadata "$familiar_name" "$familiar_harness" "$pane_id"
+      report_invalid_metadata "$familiar_name" "$familiar_harness" "$familiar_id"
       continue
     fi
     IFS=$'\t' read -r request_file response_file <<< "$derived_paths"
 
-    if [[ $pane_dead == 1 && ! -f $response_file ]]; then
+    if [[ $familiar_closed == 1 && ! -f $response_file ]]; then
       printf 'Managed Familiar: %s (%s, pane %s, ended without response)\n' \
-        "$familiar_name" "$familiar_harness" "$pane_id"
+        "$familiar_name" "$familiar_harness" "$familiar_id"
     else
       printf 'Managed Familiar: %s (%s, pane %s, %s)\n' \
-        "$familiar_name" "$familiar_harness" "$pane_id" "$(response_status "$response_file")"
+        "$familiar_name" "$familiar_harness" "$familiar_id" "$(response_status "$response_file")"
     fi
     printf '  request: %s\n  response: %s\n' "$request_file" "$response_file"
-  done < <(familiar_managed_rows "$summoner_pane")
+  done < <(familiar_managed_familiars "$summoner_id")
 
   if (( ! has_managed_familiar )); then
     printf 'No managed Familiar exists for this summoning agent instance.\n'
@@ -170,21 +172,21 @@ report_familiars() {
 }
 
 completion_state() {
-  local -r summoner_pane=$1
-  local pane_id
+  local -r summoner_id=$1
+  local familiar_id
   local familiar_name
   local familiar_timestamp
   local familiar_harness
   local storage_directory
-  local pane_dead
+  local familiar_closed
   local derived_paths
   local response_file
   local has_managed_familiar=0
   local has_pending_response=0
   local has_failure=0
 
-  while IFS=$'\t' read -r pane_id familiar_name familiar_timestamp familiar_harness storage_directory pane_dead; do
-    [[ $pane_id ]] || continue
+  while IFS=$'\t' read -r familiar_id familiar_name familiar_timestamp familiar_harness storage_directory familiar_closed; do
+    [[ $familiar_id ]] || continue
     has_managed_familiar=1
 
     if ! derived_paths=$(derive_paths "$familiar_timestamp" "$familiar_name" "$storage_directory"); then
@@ -196,12 +198,12 @@ completion_state() {
     if [[ -f $response_file ]]; then
       continue
     fi
-    if [[ -e $response_file || $pane_dead == 1 ]]; then
+    if [[ -e $response_file || $familiar_closed == 1 ]]; then
       has_failure=1
     else
       has_pending_response=1
     fi
-  done < <(familiar_managed_rows "$summoner_pane")
+  done < <(familiar_managed_familiars "$summoner_id")
 
   if (( ! has_managed_familiar )); then
     printf 'no-familiar'
@@ -214,32 +216,32 @@ completion_state() {
   fi
 }
 
-open_familiar_pane_id() {
-  local -r summoner_pane=$1
+open_familiar_id() {
+  local -r summoner_id=$1
 
-  familiar_managed_rows "$summoner_pane" \
+  familiar_managed_familiars "$summoner_id" \
     | awk -F '\t' '$6 != "1" { print $1; exit }'
 }
 
 wait_for_auto_close() {
-  local -r summoner_pane=$1
+  local -r summoner_id=$1
   local -r inspection_seconds=$2
   local -r started_at_seconds=$SECONDS
-  local pane_id
+  local familiar_id
   local remaining_seconds
   local sleep_seconds
 
   while true; do
-    pane_id=$(open_familiar_pane_id "$summoner_pane")
-    if [[ -z $pane_id ]]; then
+    familiar_id=$(open_familiar_id "$summoner_id")
+    if [[ -z $familiar_id ]]; then
       printf 'Auto-close ended: the Familiar pane is closed.\n'
       return 0
     fi
 
     remaining_seconds=$((inspection_seconds - (SECONDS - started_at_seconds)))
     if (( remaining_seconds <= 0 )); then
-      if familiar_close_pane "$pane_id"; then
-        printf 'Auto-closed Familiar pane %s after %s seconds of user inspection.\n' "$pane_id" "$inspection_seconds"
+      if familiar_close_familiar "$familiar_id"; then
+        printf 'Auto-closed Familiar pane %s after %s seconds of user inspection.\n' "$familiar_id" "$inspection_seconds"
       else
         printf 'Auto-close ended: the Familiar pane was already closed.\n'
       fi
@@ -254,7 +256,7 @@ wait_for_auto_close() {
 }
 
 wait_for_completion() {
-  local -r summoner_pane=$1
+  local -r summoner_id=$1
   local -r timeout_seconds=$2
   local -r auto_close_enabled=$3
   local -r auto_close_seconds=$4
@@ -264,23 +266,23 @@ wait_for_completion() {
   local sleep_seconds
 
   while true; do
-    state=$(completion_state "$summoner_pane")
+    state=$(completion_state "$summoner_id")
     case "$state" in
       delivered)
         if (( auto_close_enabled )); then
-          wait_for_auto_close "$summoner_pane" "$auto_close_seconds"
+          wait_for_auto_close "$summoner_id" "$auto_close_seconds"
         fi
-        report_familiars "$summoner_pane"
+        report_familiars "$summoner_id"
         return
         ;;
       failed|no-familiar)
-        report_familiars "$summoner_pane"
+        report_familiars "$summoner_id"
         return
         ;;
       waiting)
         remaining_seconds=$((timeout_seconds - (SECONDS - started_at_seconds)))
         if (( remaining_seconds <= 0 )); then
-          report_familiars "$summoner_pane"
+          report_familiars "$summoner_id"
           printf 'Timed out after %s seconds; the Familiar is still working.\n' "$timeout_seconds"
           return
         fi
@@ -310,12 +312,14 @@ main() {
     auto_close_seconds=$(normalize_auto_close_seconds "$auto_close_seconds" 'FAMILIAR_AUTO_CLOSE_SECONDS')
   fi
   readonly should_wait timeout_seconds auto_close_enabled auto_close_seconds
-  [[ -n ${TMUX:-} ]] || fail 'This status command must run inside tmux.'
-  [[ -n ${TMUX_PANE:-} ]] || fail 'This status command must run from a tmux pane.'
+  local summoner_id
+  familiar_backend_require_context || exit 1
+  summoner_id=$(familiar_backend_summoner_id)
+  readonly summoner_id
   if (( should_wait )); then
-    wait_for_completion "$TMUX_PANE" "$timeout_seconds" "$auto_close_enabled" "$auto_close_seconds"
+    wait_for_completion "$summoner_id" "$timeout_seconds" "$auto_close_enabled" "$auto_close_seconds"
   else
-    report_familiars "$TMUX_PANE"
+    report_familiars "$summoner_id"
   fi
 }
 
