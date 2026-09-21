@@ -57,6 +57,9 @@ Familiar's CLI independently of your own and is required; unless the user names
 one, pass the harness you run in (`claude` or `codex`) - the launcher cannot
 infer it.
 
+For Codex sessions whose workspace sandbox cannot access the tmux socket, see
+[the scoped rule example](examples/codex/familiar.rules).
+
 ```bash
 <skill-dir>/scripts/summon.sh \
   --name <bare-familiar-name> \
