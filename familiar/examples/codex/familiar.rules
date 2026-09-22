@@ -1,23 +1,25 @@
-# Copy this file to ~/.codex/rules/familiar.rules, replace <codex-skills-dir>
-# with the absolute directory containing the familiar skill, then restart Codex.
-# Rule patterns do not expand environment variables or placeholders.
+# Copy this file to ~/.codex/rules/familiar.rules, replace <codex-home> with
+# the absolute path to the Codex configuration directory, then restart Codex.
+# Match the installed skill path under <codex-home>/skills, not the source
+# checkout path. Rule patterns do not expand environment variables or
+# placeholders.
 prefix_rule(
-    pattern=["<codex-skills-dir>/familiar/scripts/summon.sh"],
+    pattern=["<codex-home>/skills/familiar/scripts/summon.sh"],
     decision="allow",
     justification="The Familiar launcher connects to the current tmux Unix socket.",
 )
 prefix_rule(
-    pattern=["<codex-skills-dir>/familiar/scripts/status.sh"],
+    pattern=["<codex-home>/skills/familiar/scripts/status.sh"],
     decision="allow",
     justification="Familiar status reads managed-pane metadata from the current tmux Unix socket.",
 )
 prefix_rule(
-    pattern=["<codex-skills-dir>/familiar/scripts/message.sh"],
+    pattern=["<codex-home>/skills/familiar/scripts/message.sh"],
     decision="allow",
     justification="Familiar follow-up delivery uses the current tmux Unix socket.",
 )
 prefix_rule(
-    pattern=["<codex-skills-dir>/familiar/scripts/dismiss.sh"],
+    pattern=["<codex-home>/skills/familiar/scripts/dismiss.sh"],
     decision="allow",
     justification="Familiar dismissal uses the current tmux Unix socket.",
 )
