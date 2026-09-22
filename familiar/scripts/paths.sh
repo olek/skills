@@ -44,7 +44,7 @@ familiar_validate_name() {
   local -r familiar_name=$1
 
   [[ $familiar_name =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || return 1
-  [[ ! $familiar_name =~ ^(fm|fmrq|fmrs)(-|$) ]]
+  [[ ! $familiar_name =~ ^(fm|rq|rs)(-|$) ]]
 }
 
 familiar_session_name() {
@@ -58,14 +58,14 @@ familiar_request_filename() {
   local -r familiar_timestamp=$1
   local -r familiar_name=$2
 
-  printf '%s-fmrq-%s.md\n' "$familiar_timestamp" "$familiar_name"
+  printf '%s-rq-%s.md\n' "$familiar_timestamp" "$familiar_name"
 }
 
 familiar_response_filename() {
   local -r familiar_timestamp=$1
   local -r familiar_name=$2
 
-  printf '%s-fmrs-%s.md\n' "$familiar_timestamp" "$familiar_name"
+  printf '%s-rs-%s.md\n' "$familiar_timestamp" "$familiar_name"
 }
 
 familiar_staged_request_filename() {
@@ -174,7 +174,7 @@ familiar_paths_main() {
   fi
 
   [[ -n $familiar_name ]] || familiar_paths_fail "${output_kind} requires --name <bare-familiar-name>"
-  familiar_validate_name "$familiar_name" || familiar_paths_fail 'Familiar name must be lowercase kebab-case without an fm, fmrq, or fmrs prefix.'
+  familiar_validate_name "$familiar_name" || familiar_paths_fail 'Familiar name must be lowercase kebab-case without an fm, rq, or rs prefix.'
 
   local familiar_timestamp
   familiar_timestamp=$(familiar_current_timestamp)

@@ -504,13 +504,13 @@ mkdir -p -- "$work_directory"
 
 default_name='date-derived-familiar'
 default_request=$(create_request "$default_name" "$DEFAULT_STORAGE")
-default_timestamped_request="$DEFAULT_STORAGE/$TIMESTAMP-fmrq-$default_name.md"
+default_timestamped_request="$DEFAULT_STORAGE/$TIMESTAMP-rq-$default_name.md"
 default_response=$(response_path_for "$default_name")
 assert_equals "$(run_config --directory)" "$DEFAULT_STORAGE"
 assert_equals "$(run_config --antechamber-directory)" "$DEFAULT_ANTECHAMBER"
 assert_equals "$(run_config --session-name --name "$default_name")" "$TIMESTAMP-fm-$default_name"
 assert_equals "$default_request" "$(run_config --request-path --name "$default_name")"
-assert_equals "$default_response" "$DEFAULT_STORAGE/$TIMESTAMP-fmrs-$default_name.md"
+assert_equals "$default_response" "$DEFAULT_STORAGE/$TIMESTAMP-rs-$default_name.md"
 assert_file_not_contains "$default_request" "$default_response"
 assert_file_not_contains "$default_request" 'completion-delivery contract'
 assert_equals "$(run_config --session-name --name '260918-task')" "$TIMESTAMP-fm-260918-task"
@@ -528,12 +528,12 @@ assert_equals "$fresh_request" "$fresh_antechamber/fresh-antechamber.md"
 FAMILIAR_HOME="$OVERRIDE_STORAGE"
 override_name='environment-override'
 override_request=$(create_request "$override_name" "$OVERRIDE_STORAGE")
-override_timestamped_request="$OVERRIDE_STORAGE/$TIMESTAMP-fmrq-$override_name.md"
+override_timestamped_request="$OVERRIDE_STORAGE/$TIMESTAMP-rq-$override_name.md"
 override_response=$(response_path_for "$override_name")
 assert_equals "$(run_config --directory)" "$OVERRIDE_STORAGE"
 assert_equals "$(run_config --antechamber-directory)" "$OVERRIDE_ANTECHAMBER"
 assert_equals "$override_request" "$(run_config --request-path --name "$override_name")"
-assert_equals "$override_response" "$OVERRIDE_STORAGE/$TIMESTAMP-fmrs-$override_name.md"
+assert_equals "$override_response" "$OVERRIDE_STORAGE/$TIMESTAMP-rs-$override_name.md"
 
 reset_fake_tmux
 override_launch_output=$(run_launcher --name "$override_name" --cwd "$work_directory" --harness claude)
@@ -608,7 +608,7 @@ opencode_command=$(tail -n 1 "$FAKE_TMUX_SPLIT_ARGS")
 assert_contains "$opencode_command" 'exec opencode'
 assert_contains "$opencode_command" "--model $(shell_quote provider/model)"
 assert_contains "$opencode_command" '--prompt '
-assert_contains "$opencode_command" "$TIMESTAMP-fmrs-$opencode_name.md"
+assert_contains "$opencode_command" "$TIMESTAMP-rs-$opencode_name.md"
 assert_not_contains "$opencode_command" '--auto'
 assert_not_contains "$opencode_command" '--effort'
 
@@ -621,7 +621,7 @@ assert_contains "$antigravity_command" 'exec agy'
 assert_contains "$antigravity_command" "--model $(shell_quote gemini-pro)"
 assert_contains "$antigravity_command" "--effort $(shell_quote high)"
 assert_contains "$antigravity_command" '--prompt-interactive '
-assert_contains "$antigravity_command" "$TIMESTAMP-fmrs-$antigravity_name.md"
+assert_contains "$antigravity_command" "$TIMESTAMP-rs-$antigravity_name.md"
 assert_not_contains "$antigravity_command" '--dangerously-skip-permissions'
 
 # Invalid input and launch failures must not consume the staged request.
@@ -642,8 +642,8 @@ done
 invalid_name_case=0
 for invalid_name in \
   'fm-task' \
-  'fmrq-task' \
-  'fmrs-task' \
+  'rq-task' \
+  'rs-task' \
   'Bad-name' \
   'name_with_underscore' \
   'name with spaces'; do
@@ -704,7 +704,7 @@ assert_no_split
 
 collision_name='durable-collision'
 collision_request=$(create_request "$collision_name" "$DEFAULT_STORAGE")
-touch -- "$DEFAULT_STORAGE/$TIMESTAMP-fmrq-$collision_name.md"
+touch -- "$DEFAULT_STORAGE/$TIMESTAMP-rq-$collision_name.md"
 reset_fake_tmux
 if run_launcher --name "$collision_name" --cwd "$work_directory" --harness codex >/dev/null 2>&1; then
   fail_test 'expected an existing durable request to block the launch'
@@ -721,7 +721,7 @@ if run_launcher --name "$split_failure_name" --cwd "$work_directory" --harness c
 fi
 FAKE_TMUX_FAIL_COMMAND=''
 [[ -f $split_failure_request ]] || fail_test 'expected split failure to restore the staged request'
-[[ ! -e $DEFAULT_STORAGE/$TIMESTAMP-fmrq-$split_failure_name.md ]] || fail_test 'expected no durable request after split failure'
+[[ ! -e $DEFAULT_STORAGE/$TIMESTAMP-rq-$split_failure_name.md ]] || fail_test 'expected no durable request after split failure'
 
 metadata_failure_name='metadata-failure'
 metadata_failure_request=$(create_request "$metadata_failure_name" "$DEFAULT_STORAGE")
@@ -732,7 +732,7 @@ if run_launcher --name "$metadata_failure_name" --cwd "$work_directory" --harnes
 fi
 FAKE_TMUX_FAIL_SET_OPTION=''
 [[ -f $metadata_failure_request ]] || fail_test 'expected metadata failure to restore the staged request'
-[[ ! -e $DEFAULT_STORAGE/$TIMESTAMP-fmrq-$metadata_failure_name.md ]] || fail_test 'expected no durable request after metadata failure'
+[[ ! -e $DEFAULT_STORAGE/$TIMESTAMP-rq-$metadata_failure_name.md ]] || fail_test 'expected no durable request after metadata failure'
 assert_file_contains "$FAKE_TMUX_CALLS" 'kill-pane'
 
 # Verify message delivery is scoped to the current summoning pane and sends text,
@@ -914,7 +914,7 @@ historical_timestamp='250101-1234'
 legacy_name='legacy-status'
 delivered_response=$(response_path_for "$delivered_name")
 invalid_response=$(response_path_for "$invalid_name")
-historical_response="$status_storage/$historical_timestamp-fmrs-$historical_name.md"
+historical_response="$status_storage/$historical_timestamp-rs-$historical_name.md"
 touch -- "$delivered_response" "$historical_response"
 mkdir -p -- "$invalid_response"
 reset_fake_tmux
@@ -932,7 +932,7 @@ assert_contains "$status_output" 'Managed Familiar: status-awaiting (claude, pan
 assert_contains "$status_output" 'Managed Familiar: status-invalid (claude, pane %7, response path invalid)'
 assert_contains "$status_output" 'Managed Familiar: status-dead (codex, pane %8, ended without response)'
 assert_contains "$status_output" 'Managed Familiar: legacy-status (unknown, pane %10, awaiting response)'
-assert_contains "$status_output" "  request: $status_storage/$historical_timestamp-fmrq-$historical_name.md"
+assert_contains "$status_output" "  request: $status_storage/$historical_timestamp-rq-$historical_name.md"
 assert_contains "$status_output" "  response: $historical_response"
 assert_not_contains "$status_output" 'other-summoner'
 FAMILIAR_HOME="$status_storage"

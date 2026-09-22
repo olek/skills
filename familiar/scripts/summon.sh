@@ -100,7 +100,7 @@ validate_inputs() {
     usage
     fail 'The --name, --cwd, and --harness options are required.'
   }
-  familiar_validate_name "$familiar_name" || fail 'Familiar name must be lowercase kebab-case without an fm, fmrq, or fmrs prefix.'
+  familiar_validate_name "$familiar_name" || fail 'Familiar name must be lowercase kebab-case without an fm, rq, or rs prefix.'
   [[ $working_directory = /* ]] || fail 'The --cwd path must be absolute.'
   familiar_harness_load "$harness" || return 1
   local executable

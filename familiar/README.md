@@ -66,8 +66,8 @@ same-day artifacts sort chronologically:
 
 | File | Name |
 | --- | --- |
-| request | `YYMMDD-HHMM-fmrq-<name>.md` |
-| response | `YYMMDD-HHMM-fmrs-<name>.md` |
+| request | `YYMMDD-HHMM-rq-<name>.md` |
+| response | `YYMMDD-HHMM-rs-<name>.md` |
 
 ## Configuration
 

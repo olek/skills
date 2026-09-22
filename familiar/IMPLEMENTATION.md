@@ -58,7 +58,7 @@ touches a real tmux server.
 ## Naming and storage
 
 The caller supplies a lowercase kebab-case name (e.g.
-`simplify-familiar-protocol`) that cannot start with an `fm`, `fmrq`, or `fmrs`
+`simplify-familiar-protocol`) that cannot start with an `fm`, `rq`, or `rs`
 prefix. The request is first staged, untimestamped, at
 `<familiar-home>/antechamber/<name>.md`; the missing timestamp keeps date-like
 names unambiguous. An existing staged path is a collision the caller must report
@@ -71,8 +71,8 @@ same-day files chronologically:
 | Meaning | Derived value |
 | --- | --- |
 | session | `YYMMDD-HHMM-fm-<name>` |
-| request | `YYMMDD-HHMM-fmrq-<name>.md` |
-| response | `YYMMDD-HHMM-fmrs-<name>.md` |
+| request | `YYMMDD-HHMM-rq-<name>.md` |
+| response | `YYMMDD-HHMM-rs-<name>.md` |
 
 The Familiar home is the parent of both durable files; its `antechamber` child
 holds only staged requests. `FAMILIAR_HOME` overrides the default home with an
