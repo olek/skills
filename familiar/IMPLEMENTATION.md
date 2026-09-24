@@ -40,7 +40,7 @@ tmux is the substrate; the scripts are small and single-purpose:
   `scripts/lib/harnesses/README.md`. Add a harness by dropping in one file.
 - **`scripts/status.sh`** - finds the current agent's Familiar, derives
   paths from its pane metadata, and reports name, harness, pane, paths, and
-  delivery state. `--wait` polls quietly until delivery or failure; `--auto-close`
+  delivery state. `--wait` polls quietly until delivery or failure; `--auto-dismiss`
   extends that one invocation (see below).
 - **`scripts/models.sh`** - prints only model IDs, one per line.
 - **`scripts/efforts.sh`** - prints only supported effort IDs, one per
@@ -49,11 +49,10 @@ tmux is the substrate; the scripts are small and single-purpose:
   a harness and intent as `model=<id>` and `effort=<id>`.
 - Each harness owns its catalogs and may embed them or query its CLI when
   availability depends on local configuration.
-- **`tests/test-familiar.sh`** - exercises the scripts against a fake tmux and fake
-  harness executables on `PATH`, asserting launch commands, catalog output, harness
-discovery, derived paths, pane metadata, guard failures, and status/wait
-reporting. It also covers message delivery, dismissal, and validation. It never
-touches a real tmux server.
+- **`tests/test-runner.sh`** - runs the shell test suite. Shared fixtures and
+  fakes live in `tests/lib/`; focused lifecycle, harness, path, summon, message,
+  dismissal, and status tests live in `tests/cases/`. The suite uses fake tmux
+  and harness executables on `PATH` and never touches a real tmux server.
 
 ## Naming and storage
 
@@ -129,13 +128,13 @@ The launcher also sets `CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1` for every Claude
 Familiar process so tmux and terminal scrollback survive. It is scoped to that
 process and does not touch the user's global Claude TUI preference.
 
-## Auto-close inspection
+## Auto-dismiss inspection
 
 `dismiss.sh` is the public action for immediate dismissal. It resolves
 the current summoner's one live managed Familiar and never accepts an arbitrary
-pane target. `--wait` alone is a plain completion wait. `--wait --auto-close`
+pane target. `--wait` alone is a plain completion wait. `--wait --auto-dismiss`
 remains a status convenience: after delivery it keeps that invocation alive for
 an inspection interval - 60 seconds by default, configurable via
-`FAMILIAR_AUTO_CLOSE_SECONDS` up to 60 - then closes a remaining live scoped pane,
-returning early if none remains. `--auto-close` takes no value and requires an
+`FAMILIAR_AUTO_DISMISS_SECONDS` up to 60 - then dismisses a remaining live scoped pane,
+returning early if none remains. `--auto-dismiss` takes no value and requires an
 explicit `--wait`. Handling it in one invocation avoids repeated status probes.

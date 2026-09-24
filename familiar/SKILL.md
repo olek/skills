@@ -93,7 +93,7 @@ review), query `defaults.sh`, and use its named `model=<id>` and
 Omit the corresponding `--model` or `--effort` launcher option; never pass
 `default` as its value.
 
-## Check status and follow up
+## Interactions with active Familiar agent
 
 ```bash
 <skill-dir>/scripts/status.sh
@@ -105,19 +105,25 @@ identifier.
 
 After summoning, if nothing follows up, do nothing. To wait for completion,
 invoke `status.sh --wait` once and wait for its result. Add
-`--auto-close` when you want that wait to close a remaining live pane after its
+`--auto-dismiss` when you want that wait to dismiss a remaining live pane after its
 inspection interval; omit it to leave the pane open for the user. Do not
 repeatedly probe status.
 
-For a follow-up, use the message wrapper:
+**Important - wait quietly.** After invoking `status.sh --wait`, just set
+timeout on the command to 11 minutes and wait for its completion, producing no
+intermediate user updates. Do not fidget with sleep loops, timers, repeated
+status calls, response-file polling, or short waits that wake up only to
+announce that work continues. Let the single blocking command finish.
+If agent is still working, then proceed to block on status again.
+
+For a follow-up, use the message script that sends a clarification message to
+Familiar agent as a prompt:
 
 ```bash
 <skill-dir>/scripts/message.sh --message 'follow-up text'
 ```
 
-To dismiss the current summoning agent's one live Familiar, use the dismissal
-wrapper. It accepts no pane ID and rejects zero, closed-only, or multiple live
-matches.
+To dismiss the current active Familiar, use the dismissal script.
 
 ```bash
 <skill-dir>/scripts/dismiss.sh

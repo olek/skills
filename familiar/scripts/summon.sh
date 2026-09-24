@@ -180,7 +180,7 @@ build_familiar_prompt() {
   local -r request_file=$1
   local -r response_file=$2
 
-  printf 'Read and follow the request at %s. The resolved response path is %s. Work only within its stated scope. Do not create %s until the result is complete; then write the complete result there in a single write and state completion in this Familiar session. You may delegate read-only work (research, reading, checks) to headless sub-agents (cheaper models are fine), but make every file change yourself.' \
+  printf 'Read and follow the request at %s. The resolved response path is %s. Work only within its stated scope. Do not create %s until the result is complete; then write the complete result there in a single write and state completion in this Familiar session. You may delegate read-only work (research, reading, checks) to headless sub-agents as needed, but you may perform updates only in main agent. You are allowed to ask user clarifying questions as needed.' \
     "$request_file" "$response_file" "$response_file"
 }
 

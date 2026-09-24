@@ -17,11 +17,14 @@ familiar_harness_intent_pair() {
   local -r intent=${1:-}
 
   case "$intent" in
-    planning|review)
+    planning)
       printf 'opus medium\n'
       ;;
+    review)
+      printf 'opus high\n'
+      ;;
     implementation)
-      printf 'sonnet high\n'
+      printf 'opus low\n'
       ;;
     *)
       return 1

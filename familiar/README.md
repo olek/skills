@@ -41,7 +41,7 @@ wrappers resolve the managed pane from tmux metadata, so they do not accept an
 arbitrary pane target.
 
 Check delivery with `scripts/status.sh`. To wait for completion, invoke
-`scripts/status.sh --wait` once; add `--auto-close` to close a remaining live
+`scripts/status.sh --wait` once; add `--auto-dismiss` to dismiss a remaining live
 pane after its inspection interval.
 
 Send a follow-up with `scripts/message.sh --message '<text>'`. It
@@ -74,7 +74,7 @@ same-day artifacts sort chronologically:
 | Variable | Effect |
 | --- | --- |
 | `FAMILIAR_HOME` | Absolute directory for the Familiar home, where requests, responses, and the antechamber live. Overrides the built-in default. |
-| `FAMILIAR_AUTO_CLOSE_SECONDS` | Seconds a delivered pane stays open for inspection before it auto-closes, up to 60 (the default). |
+| `FAMILIAR_AUTO_DISMISS_SECONDS` | Seconds a delivered pane stays open for inspection before it is automatically dismissed, up to 60 (the default). |
 
 ## Requirements
 

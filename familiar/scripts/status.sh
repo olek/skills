@@ -9,9 +9,9 @@
 # identity, so moving between terminal views does not redirect the query. By
 # default it reports immediately. Use --wait [--timeout <seconds>]
 # to wait quietly for a response; the default timeout is ten minutes.  Add
-# --auto-close to keep waiting in the same invocation after delivery for a
+# --auto-dismiss to keep waiting in the same invocation after delivery for a
 # configurable inspection interval (60 seconds by default), closing the Familiar
-# pane if it remains open. FAMILIAR_AUTO_CLOSE_SECONDS controls the interval.
+# pane if it remains open. FAMILIAR_AUTO_DISMISS_SECONDS controls the interval.
 # The launcher permits one managed Familiar per summoning agent instance.
 set -euo pipefail
 
@@ -19,8 +19,8 @@ SCRIPT_DIRECTORY=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 readonly SCRIPT_DIRECTORY
 readonly DEFAULT_WAIT_TIMEOUT_SECONDS=600
 readonly POLL_INTERVAL_SECONDS=5
-readonly DEFAULT_AUTO_CLOSE_SECONDS=60
-readonly AUTO_CLOSE_POLL_INTERVAL_SECONDS=1
+readonly DEFAULT_AUTO_DISMISS_SECONDS=60
+readonly AUTO_DISMISS_POLL_INTERVAL_SECONDS=1
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIRECTORY/paths.sh"
@@ -32,8 +32,8 @@ source "$SCRIPT_DIRECTORY/lib/backend.sh"
 source "$SCRIPT_DIRECTORY/lib/familiar.sh"
 
 usage() {
-  printf 'Usage: %s [--wait] [--timeout <seconds>] [--auto-close]\n' "${0##*/}" >&2
-  printf '       FAMILIAR_AUTO_CLOSE_SECONDS sets the default auto-close interval; default: 60\n' >&2
+  printf 'Usage: %s [--wait] [--timeout <seconds>] [--auto-dismiss]\n' "${0##*/}" >&2
+  printf '       FAMILIAR_AUTO_DISMISS_SECONDS sets the default auto-dismiss interval; default: 60\n' >&2
 }
 
 fail() {
@@ -41,7 +41,7 @@ fail() {
   exit 1
 }
 
-normalize_auto_close_seconds() {
+normalize_auto_dismiss_seconds() {
   local -r value=$1
   local -r source_name=$2
 
@@ -66,7 +66,7 @@ parse_arguments() {
   local -n should_wait_ref=$1
   local -n wait_option_seen_ref=$2
   local -n timeout_seconds_ref=$3
-  local -n auto_close_enabled_ref=$4
+  local -n auto_dismiss_enabled_ref=$4
   shift 4
 
   while (($#)); do
@@ -87,12 +87,12 @@ parse_arguments() {
         timeout_seconds_ref=$((10#$2))
         shift 2
         ;;
-      --auto-close)
-        (( ! auto_close_enabled_ref )) || fail '--auto-close may be specified once'
+      --auto-dismiss)
+        (( ! auto_dismiss_enabled_ref )) || fail '--auto-dismiss may be specified once'
         # shellcheck disable=SC2034 # This nameref returns the value to main.
-        auto_close_enabled_ref=1
+        auto_dismiss_enabled_ref=1
         if (($# >= 2)) && [[ $2 != --* ]]; then
-          fail '--auto-close does not take a value; set FAMILIAR_AUTO_CLOSE_SECONDS instead'
+          fail '--auto-dismiss does not take a value; set FAMILIAR_AUTO_DISMISS_SECONDS instead'
         fi
         shift
         ;;
@@ -107,7 +107,7 @@ parse_arguments() {
     esac
   done
 
-  (( ! auto_close_enabled_ref || wait_option_seen_ref )) || fail '--auto-close requires --wait; use --wait --auto-close.'
+  (( ! auto_dismiss_enabled_ref || wait_option_seen_ref )) || fail '--auto-dismiss requires --wait; use --wait --auto-dismiss.'
 }
 
 derive_paths() {
@@ -223,7 +223,7 @@ open_familiar_id() {
     | awk -F '\t' '$6 != "1" { print $1; exit }'
 }
 
-wait_for_auto_close() {
+wait_for_auto_dismiss() {
   local -r summoner_id=$1
   local -r inspection_seconds=$2
   local -r started_at_seconds=$SECONDS
@@ -234,20 +234,20 @@ wait_for_auto_close() {
   while true; do
     familiar_id=$(open_familiar_id "$summoner_id")
     if [[ -z $familiar_id ]]; then
-      printf 'Auto-close ended: the Familiar pane is closed.\n'
+      printf 'Auto-dismiss ended: the Familiar pane is closed.\n'
       return 0
     fi
 
     remaining_seconds=$((inspection_seconds - (SECONDS - started_at_seconds)))
     if (( remaining_seconds <= 0 )); then
       if familiar_close_familiar "$familiar_id"; then
-        printf 'Auto-closed Familiar pane %s after %s seconds of user inspection.\n' "$familiar_id" "$inspection_seconds"
+        printf 'Auto-dismissed Familiar pane %s after %s seconds of user inspection.\n' "$familiar_id" "$inspection_seconds"
       else
-        printf 'Auto-close ended: the Familiar pane was already closed.\n'
+        printf 'Auto-dismiss ended: the Familiar pane was already closed.\n'
       fi
       return 0
     fi
-    sleep_seconds=$AUTO_CLOSE_POLL_INTERVAL_SECONDS
+    sleep_seconds=$AUTO_DISMISS_POLL_INTERVAL_SECONDS
     if (( remaining_seconds < sleep_seconds )); then
       sleep_seconds=$remaining_seconds
     fi
@@ -258,8 +258,8 @@ wait_for_auto_close() {
 wait_for_completion() {
   local -r summoner_id=$1
   local -r timeout_seconds=$2
-  local -r auto_close_enabled=$3
-  local -r auto_close_seconds=$4
+  local -r auto_dismiss_enabled=$3
+  local -r auto_dismiss_seconds=$4
   local -r started_at_seconds=$SECONDS
   local state
   local remaining_seconds
@@ -269,8 +269,8 @@ wait_for_completion() {
     state=$(completion_state "$summoner_id")
     case "$state" in
       delivered)
-        if (( auto_close_enabled )); then
-          wait_for_auto_close "$summoner_id" "$auto_close_seconds"
+        if (( auto_dismiss_enabled )); then
+          wait_for_auto_dismiss "$summoner_id" "$auto_dismiss_seconds"
         fi
         report_familiars "$summoner_id"
         return
@@ -304,20 +304,20 @@ main() {
   # shellcheck disable=SC2034 # Passed by nameref to parse_arguments.
   local wait_option_seen=0
   local timeout_seconds=$DEFAULT_WAIT_TIMEOUT_SECONDS
-  local auto_close_enabled=0
-  local auto_close_seconds=${FAMILIAR_AUTO_CLOSE_SECONDS:-$DEFAULT_AUTO_CLOSE_SECONDS}
+  local auto_dismiss_enabled=0
+  local auto_dismiss_seconds=${FAMILIAR_AUTO_DISMISS_SECONDS:-$DEFAULT_AUTO_DISMISS_SECONDS}
 
-  parse_arguments should_wait wait_option_seen timeout_seconds auto_close_enabled "$@"
-  if (( auto_close_enabled )); then
-    auto_close_seconds=$(normalize_auto_close_seconds "$auto_close_seconds" 'FAMILIAR_AUTO_CLOSE_SECONDS')
+  parse_arguments should_wait wait_option_seen timeout_seconds auto_dismiss_enabled "$@"
+  if (( auto_dismiss_enabled )); then
+    auto_dismiss_seconds=$(normalize_auto_dismiss_seconds "$auto_dismiss_seconds" 'FAMILIAR_AUTO_DISMISS_SECONDS')
   fi
-  readonly should_wait timeout_seconds auto_close_enabled auto_close_seconds
+  readonly should_wait timeout_seconds auto_dismiss_enabled auto_dismiss_seconds
   local summoner_id
   familiar_backend_require_context || exit 1
   summoner_id=$(familiar_backend_summoner_id)
   readonly summoner_id
   if (( should_wait )); then
-    wait_for_completion "$summoner_id" "$timeout_seconds" "$auto_close_enabled" "$auto_close_seconds"
+    wait_for_completion "$summoner_id" "$timeout_seconds" "$auto_dismiss_enabled" "$auto_dismiss_seconds"
   else
     report_familiars "$summoner_id"
   fi

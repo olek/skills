@@ -18,11 +18,14 @@ familiar_harness_intent_pair() {
   local -r intent=${1:-}
 
   case "$intent" in
-    planning|review)
+    planning)
       printf 'gpt-5.6-sol medium\n'
       ;;
+    review)
+      printf 'gpt-5.6-sol high\n'
+      ;;
     implementation)
-      printf 'gpt-5.6-terra medium\n'
+      printf 'gpt-5.6-sol low\n'
       ;;
     *)
       return 1
