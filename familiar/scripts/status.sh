@@ -119,8 +119,8 @@ derive_paths() {
   familiar_validate_timestamp "$familiar_timestamp" || return 1
   familiar_validate_storage_directory "$storage_directory" || return 1
   printf '%s\t%s\n' \
-    "$(familiar_path_in_directory "$storage_directory" "$(familiar_request_filename "$familiar_timestamp" "$familiar_name")")" \
-    "$(familiar_path_in_directory "$storage_directory" "$(familiar_response_filename "$familiar_timestamp" "$familiar_name")")"
+    "$(familiar_path_in_directory "${storage_directory%/}/summonings" "$(familiar_request_filename "$familiar_timestamp" "$familiar_name")")" \
+    "$(familiar_path_in_directory "${storage_directory%/}/summonings" "$(familiar_response_filename "$familiar_timestamp" "$familiar_name")")"
 }
 
 report_invalid_metadata() {

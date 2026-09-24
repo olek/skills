@@ -8,7 +8,9 @@ test_familiar_harnesses() {
     local intent
     local opencode_models
     local opencode_efforts_output
-    local opencode_effort_command_output
+  local opencode_effort_command_output
+  local override_file
+  local override_output
   local antigravity_models
 
   # Verify harness discovery and each harness's advertised launch choices.
@@ -61,6 +63,34 @@ SCRATCH_HARNESS
   assert_contains "$opencode_effort_command_output" 'does not support launch-time effort overrides'
   antigravity_models=$(run_models --harness antigravity)
   assert_contains "$antigravity_models" 'antigravity-test-model'
+
+  FAMILIAR_HOME="$OVERRIDE_STORAGE"
+  override_file="$OVERRIDE_STORAGE/config/intent-overrides.conf"
+  mkdir -p -- "${override_file%/*}"
+  printf '%s\n' \
+    '# User-owned intent overrides.' \
+    'codex.planning = gpt-5.6-luna high' \
+    'claude.review = default default' > "$override_file"
+  assert_equals "$(run_defaults --harness codex --intent planning)" $'model=gpt-5.6-luna\neffort=high'
+  assert_equals "$(run_defaults --harness claude --intent review)" $'model=default\neffort=default'
+  assert_equals "$(run_defaults --harness codex --intent review)" $'model=gpt-5.6-sol\neffort=medium'
+
+  printf '%s\n' \
+    'codex.planning = gpt-5.6-sol medium' \
+    'codex.planning = gpt-5.6-luna high' > "$override_file"
+  override_output=''
+  if override_output=$(run_defaults --harness codex --intent planning 2>&1); then
+    fail_test 'expected a duplicate intent override to fail'
+  fi
+  assert_contains "$override_output" 'Duplicate Familiar intent override for codex.planning'
+
+  printf '%s\n' 'codex.planning = gpt-5.6-sol' > "$override_file"
+  override_output=''
+  if override_output=$(run_defaults --harness codex --intent planning 2>&1); then
+    fail_test 'expected a malformed intent override to fail'
+  fi
+  assert_contains "$override_output" 'expected <harness>.<intent> = <model> <effort>'
+  FAMILIAR_HOME=''
 }
 
 # A managed Familiar pane's metadata, one row per pane:

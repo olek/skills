@@ -59,22 +59,55 @@ identifier unless you rename it from its TUI.
 
 ## Where things live
 
-Requests and responses are durable files under the Familiar home. Before launch,
-your request waits briefly in the `antechamber` subdirectory under an
-untimestamped name; at summon time it is promoted to a timestamped path so
-same-day artifacts sort chronologically:
+Requests and responses are durable files under the Familiar home's
+`summonings` subdirectory. Before launch, your request waits briefly in the
+`antechamber` subdirectory under an untimestamped name; at summon time it is
+promoted to a timestamped path so same-day artifacts sort chronologically:
 
 | File | Name |
 | --- | --- |
 | request | `YYMMDD-HHMM-rq-<name>.md` |
 | response | `YYMMDD-HHMM-rs-<name>.md` |
 
+The default layout is:
+
+```text
+~/.familiar/
+  antechamber/
+  config/
+    intent-overrides.conf
+  summonings/
+```
+
+Familiar creates these directories when it prepares a request, resolves intent
+defaults, or launches a summon. The override file remains optional.
+
 ## Configuration
 
 | Variable | Effect |
 | --- | --- |
-| `FAMILIAR_HOME` | Absolute directory for the Familiar home, where requests, responses, and the antechamber live. Overrides the built-in default. |
+| `FAMILIAR_HOME` | Absolute directory for the Familiar home, containing `antechamber`, `config`, and `summonings`. Overrides the built-in default. |
 | `FAMILIAR_AUTO_DISMISS_SECONDS` | Seconds a delivered pane stays open for inspection before it is automatically dismissed, up to 60 (the default). |
+
+### Intent overrides
+
+Built-in model and effort recommendations are fallback values. To customize
+them without changing the skill, create
+`<FAMILIAR_HOME>/config/intent-overrides.conf` (or
+`~/.familiar/config/intent-overrides.conf` when `FAMILIAR_HOME` is unset).
+Each non-comment entry overrides one harness and intent with one model-effort
+pair:
+
+```ini
+# <harness>.<intent> = <model> <effort>
+codex.planning = gpt-5.6-sol high
+codex.implementation = gpt-5.6-luna medium
+claude.review = opus high
+```
+
+Valid intents are `planning`, `implementation`, and `review`. Either value may
+be `default`, which leaves that setting to the selected harness. Entries are
+strict: duplicate or malformed lines make the defaults lookup fail.
 
 ## Requirements
 

@@ -35,8 +35,8 @@ tmux is the substrate; the scripts are small and single-purpose:
   harness definitions by scanning `scripts/lib/harnesses/*.sh` (no central list),
   loads the selected definition, and provides the shell-quoting helper.
 - **`scripts/lib/harnesses/*.sh`** - source-only definition per harness using a
-  shared generic interface: executable, embedded models and efforts, intent
-  suggestions, and pane-command builder, per the contract in
+  shared generic interface: executable, embedded models and efforts, built-in
+  intent suggestions, and pane-command builder, per the contract in
   `scripts/lib/harnesses/README.md`. Add a harness by dropping in one file.
 - **`scripts/status.sh`** - finds the current agent's Familiar, derives
   paths from its pane metadata, and reports name, harness, pane, paths, and
@@ -46,7 +46,10 @@ tmux is the substrate; the scripts are small and single-purpose:
 - **`scripts/efforts.sh`** - prints only supported effort IDs, one per
   line.
 - **`scripts/defaults.sh`** - prints exactly one named default pair for
-  a harness and intent as `model=<id>` and `effort=<id>`.
+  a harness and intent as `model=<id>` and `effort=<id>`, first consulting the
+  user-owned intent override file.
+- **`scripts/lib/intent-overrides.sh`** - reads the declarative
+  `config/intent-overrides.conf` file without evaluating it as shell code.
 - Each harness owns its catalogs and may embed them or query its CLI when
   availability depends on local configuration.
 - **`tests/test-runner.sh`** - runs the shell test suite. Shared fixtures and
@@ -73,12 +76,18 @@ same-day files chronologically:
 | request | `YYMMDD-HHMM-rq-<name>.md` |
 | response | `YYMMDD-HHMM-rs-<name>.md` |
 
-The Familiar home is the parent of both durable files; its `antechamber` child
-holds only staged requests. `FAMILIAR_HOME` overrides the default home with an
-absolute directory. Existing durable request or response paths are hard failures,
-including a same-name summon within the same minute; the staged request stays
-available for recovery. Deriving every path from the shared script, rather than
-trusting caller-supplied paths, avoids mismatches and stale paths.
+The Familiar home contains a `summonings` child for durable files and an
+`antechamber` child for staged requests. Its `config` child holds user-owned
+configuration such as `intent-overrides.conf`. `FAMILIAR_HOME` overrides the
+default home with an absolute directory. Existing durable request or response
+paths are hard failures, including a same-name summon within the same minute;
+the staged request stays available for recovery. Deriving every path from the
+shared script, rather than trusting caller-supplied paths, avoids mismatches and
+stale paths.
+
+The shared layout initializer creates the three child directories when a request
+is prepared, intent defaults are resolved, or a summon launches. It does not
+create an override file.
 
 ## Completion contract
 
@@ -94,8 +103,10 @@ and cannot infer its caller. The summoning agent supplies the harness it runs in
 and the user may override it. `--model` is optional and opaque, passed through
 unchanged; a user-specified model always wins, and model names are never
 translated between vendors. When no model is named, an intent - planning,
-implementation, or review - maps to a complete model-effort pair owned by the
-harness definition and returned by `defaults.sh`.
+implementation, or review - maps to a complete model-effort pair returned by
+`defaults.sh`. A user-owned `<FAMILIAR_HOME>/config/intent-overrides.conf` entry
+takes precedence over the harness definition's built-in pair. The file uses one
+strictly parsed entry per pair: `<harness>.<intent> = <model> <effort>`.
 
 ## Pane metadata
 

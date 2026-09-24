@@ -28,8 +28,10 @@ readonly FAKE_SLEEP_ARGS="$TEST_ROOT/sleep-args.txt"
 readonly TEST_HOME="$TEST_ROOT/home"
 readonly DEFAULT_STORAGE="$TEST_HOME/.familiar"
 readonly DEFAULT_ANTECHAMBER="$DEFAULT_STORAGE/antechamber"
+readonly DEFAULT_SUMMONINGS="$DEFAULT_STORAGE/summonings"
 readonly OVERRIDE_STORAGE="$TEST_ROOT/override familiar home"
 readonly OVERRIDE_ANTECHAMBER="$OVERRIDE_STORAGE/antechamber"
+readonly OVERRIDE_SUMMONINGS="$OVERRIDE_STORAGE/summonings"
 TIMESTAMP=$(date +%y%m%d-%H%M)
 readonly TIMESTAMP
 FAMILIAR_HOME=''
@@ -291,6 +293,8 @@ run_efforts() {
 run_defaults() {
   env \
     PATH="$FAKE_BIN:$PATH" \
+    HOME="$TEST_HOME" \
+    FAMILIAR_HOME="$FAMILIAR_HOME" \
     "$DEFAULTS" "$@"
 }
 

@@ -123,6 +123,7 @@ resolve_paths() {
   local -r familiar_name=$7
   local -r working_directory_input=$8
   local antechamber_directory
+  local summonings_directory
   local storage_directory_input
   local staged_request_file_input
   local request_file_input
@@ -133,21 +134,27 @@ resolve_paths() {
 
   storage_directory_input=$(familiar_storage_directory) || fail 'HOME must be set when FAMILIAR_HOME is not set.'
   familiar_validate_storage_directory "$storage_directory_input" || fail 'FAMILIAR_HOME must be an absolute path.'
+  familiar_ensure_home_layout || fail 'Could not create the Familiar home layout.'
   antechamber_directory=$(familiar_antechamber_directory)
+  summonings_directory=$(familiar_summonings_directory)
   staged_request_file_input=$(familiar_staged_request_path "$familiar_name")
   request_file_input=$(familiar_request_path "$familiar_timestamp" "$familiar_name")
   response_file_input=$(familiar_response_path "$familiar_timestamp" "$familiar_name")
-  readonly antechamber_directory storage_directory_input staged_request_file_input request_file_input response_file_input
+  readonly antechamber_directory summonings_directory storage_directory_input staged_request_file_input request_file_input response_file_input
 
   [[ -f $staged_request_file_input && -r $staged_request_file_input ]] || fail "Staged request is not a readable file: $staged_request_file_input"
   [[ -d $storage_directory_input && -r $storage_directory_input && -w $storage_directory_input ]] || fail "Familiar storage directory is not a writable directory: $storage_directory_input"
   [[ -d $antechamber_directory && -r $antechamber_directory && -w $antechamber_directory ]] || fail "Familiar antechamber is not a writable directory: $antechamber_directory"
+  [[ -d $summonings_directory && -r $summonings_directory && -w $summonings_directory ]] || fail "Familiar summonings directory is not a writable directory: $summonings_directory"
   [[ ! -e $request_file_input ]] || fail "Request path already exists: $request_file_input"
   [[ ! -e $response_file_input ]] || fail "Response path already exists: $response_file_input"
   [[ -d $working_directory_input && -r $working_directory_input ]] || fail "Working directory is not readable: $working_directory_input"
 
   storage_parent=$(realpath -e -- "$storage_directory_input") || fail "Familiar storage directory does not exist: $storage_directory_input"
   readonly storage_parent
+  local summonings_parent
+  summonings_parent=$(realpath -e -- "$summonings_directory") || fail "Familiar summonings directory does not exist: $summonings_directory"
+  readonly summonings_parent
   # shellcheck disable=SC2034 # This nameref returns canonical Familiar home to main.
   resolved_storage_directory_ref=$storage_parent
   request_basename=${request_file_input##*/}
@@ -157,15 +164,10 @@ resolve_paths() {
   resolved_staged_request_file_ref=$(realpath -e -- "$staged_request_file_input")
   # shellcheck disable=SC2034 # These namerefs return resolved paths to main.
   resolved_working_directory_ref=$(realpath -e -- "$working_directory_input")
-  if [[ $storage_parent == / ]]; then
-    resolved_request_file_ref="/$request_basename"
-    resolved_response_file_ref="/$response_basename"
-  else
-    # shellcheck disable=SC2034 # This nameref returns the resolved request path to main.
-    resolved_request_file_ref="$storage_parent/$request_basename"
-    # shellcheck disable=SC2034 # This nameref returns the resolved response path to main.
-    resolved_response_file_ref="$storage_parent/$response_basename"
-  fi
+  # shellcheck disable=SC2034 # These namerefs return resolved paths to main.
+  resolved_request_file_ref="$summonings_parent/$request_basename"
+  # shellcheck disable=SC2034 # These namerefs return resolved paths to main.
+  resolved_response_file_ref="$summonings_parent/$response_basename"
 }
 
 ensure_no_managed_familiar() {

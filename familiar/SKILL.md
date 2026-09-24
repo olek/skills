@@ -89,7 +89,9 @@ Query the selected harness catalogs:
 
 When the user names no model, pick the intent (planning, implementation, or
 review), query `defaults.sh`, and use its named `model=<id>` and
-`effort=<id>` pair together. An intent pair may use `default` for either field.
+`effort=<id>` pair together. The lookup applies the user's optional Familiar
+intent overrides before the built-in recommendations. An intent pair may use
+`default` for either field.
 Omit the corresponding `--model` or `--effort` launcher option; never pass
 `default` as its value.
 

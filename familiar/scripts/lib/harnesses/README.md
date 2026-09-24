@@ -16,8 +16,9 @@ familiar_harness_build_command <cwd> <session_name> <prompt> <model> <effort> <s
 ```
 
 The executable, models, and efforts are printed to standard output. Models and
-efforts are one entry per line. `intent_pair` returns the model and effort on
-one line, separated by one space, for the defaults CLI to name. `build_command`
+efforts are one entry per line. `intent_pair` returns the built-in model and
+effort on one line, separated by one space, for the defaults CLI to name when a
+user-owned intent override does not apply. `build_command`
 prints the complete pane command and owns all harness-specific flags and
 environment prefixes.
 

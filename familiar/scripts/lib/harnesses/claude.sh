@@ -24,7 +24,7 @@ familiar_harness_intent_pair() {
       printf 'opus high\n'
       ;;
     implementation)
-      printf 'opus low\n'
+      printf 'sonnet medium\n'
       ;;
     *)
       return 1

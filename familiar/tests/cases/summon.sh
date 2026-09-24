@@ -3,11 +3,11 @@ test_familiar_summon() {
   local FAMILIAR_HOME=''
   local default_name='summon-default'
   local default_request
-  local default_timestamped_request="$DEFAULT_STORAGE/$TIMESTAMP-rq-$default_name.md"
+  local default_timestamped_request="$DEFAULT_SUMMONINGS/$TIMESTAMP-rq-$default_name.md"
   local default_response
   local override_name='summon-environment-override'
   local override_request
-  local override_timestamped_request="$OVERRIDE_STORAGE/$TIMESTAMP-rq-$override_name.md"
+  local override_timestamped_request="$OVERRIDE_SUMMONINGS/$TIMESTAMP-rq-$override_name.md"
   local override_response
   local override_launch_output
   local override_command
@@ -184,7 +184,8 @@ test_familiar_summon() {
 
   collision_name='durable-collision'
   collision_request=$(create_request "$collision_name" "$DEFAULT_STORAGE")
-  touch -- "$DEFAULT_STORAGE/$TIMESTAMP-rq-$collision_name.md"
+  mkdir -p -- "$DEFAULT_SUMMONINGS"
+  touch -- "$DEFAULT_SUMMONINGS/$TIMESTAMP-rq-$collision_name.md"
   reset_fake_tmux
   if run_launcher --name "$collision_name" --cwd "$work_directory" --harness codex >/dev/null 2>&1; then
     fail_test 'expected an existing durable request to block the launch'
@@ -201,7 +202,7 @@ test_familiar_summon() {
   fi
   FAKE_TMUX_FAIL_COMMAND=''
   [[ -f $split_failure_request ]] || fail_test 'expected split failure to restore the staged request'
-  [[ ! -e $DEFAULT_STORAGE/$TIMESTAMP-rq-$split_failure_name.md ]] || fail_test 'expected no durable request after split failure'
+  [[ ! -e $DEFAULT_SUMMONINGS/$TIMESTAMP-rq-$split_failure_name.md ]] || fail_test 'expected no durable request after split failure'
 
   metadata_failure_name='metadata-failure'
   metadata_failure_request=$(create_request "$metadata_failure_name" "$DEFAULT_STORAGE")
@@ -212,6 +213,6 @@ test_familiar_summon() {
   fi
   FAKE_TMUX_FAIL_SET_OPTION=''
   [[ -f $metadata_failure_request ]] || fail_test 'expected metadata failure to restore the staged request'
-  [[ ! -e $DEFAULT_STORAGE/$TIMESTAMP-rq-$metadata_failure_name.md ]] || fail_test 'expected no durable request after metadata failure'
+  [[ ! -e $DEFAULT_SUMMONINGS/$TIMESTAMP-rq-$metadata_failure_name.md ]] || fail_test 'expected no durable request after metadata failure'
   assert_file_contains "$FAKE_TMUX_CALLS" 'kill-pane'
 }

@@ -32,6 +32,48 @@ familiar_antechamber_directory() {
   printf '%s/antechamber\n' "${directory%/}"
 }
 
+familiar_summonings_directory() {
+  local directory
+
+  directory=$(familiar_storage_directory) || return 1
+  readonly directory
+  familiar_validate_storage_directory "$directory" || return 1
+  printf '%s/summonings\n' "${directory%/}"
+}
+
+familiar_configuration_directory() {
+  local directory
+
+  directory=$(familiar_storage_directory) || return 1
+  readonly directory
+  familiar_validate_storage_directory "$directory" || return 1
+  printf '%s/config\n' "${directory%/}"
+}
+
+familiar_intent_overrides_path() {
+  local configuration_directory
+
+  configuration_directory=$(familiar_configuration_directory) || return 1
+  readonly configuration_directory
+  printf '%s/intent-overrides.conf\n' "$configuration_directory"
+}
+
+familiar_ensure_home_layout() {
+  local storage_directory
+  local antechamber_directory
+  local configuration_directory
+  local summonings_directory
+
+  storage_directory=$(familiar_storage_directory) || return 1
+  readonly storage_directory
+  familiar_validate_storage_directory "$storage_directory" || return 1
+  antechamber_directory=$(familiar_antechamber_directory) || return 1
+  configuration_directory=$(familiar_configuration_directory) || return 1
+  summonings_directory=$(familiar_summonings_directory) || return 1
+  readonly antechamber_directory configuration_directory summonings_directory
+  mkdir -p -- "$antechamber_directory" "$configuration_directory" "$summonings_directory"
+}
+
 familiar_current_timestamp() {
   date +%y%m%d-%H%M
 }
@@ -76,12 +118,11 @@ familiar_staged_request_filename() {
 
 familiar_path_in_storage() {
   local -r filename=$1
-  local directory
+  local summonings_directory
 
-  directory=$(familiar_storage_directory) || return 1
-  readonly directory
-  familiar_validate_storage_directory "$directory" || return 1
-  familiar_path_in_directory "$directory" "$filename"
+  summonings_directory=$(familiar_summonings_directory) || return 1
+  readonly summonings_directory
+  familiar_path_in_directory "$summonings_directory" "$filename"
 }
 
 familiar_path_in_directory() {
@@ -112,6 +153,8 @@ familiar_paths_usage() {
   printf '%s\n' \
     "Usage: ${0##*/} --directory" \
     "       ${0##*/} --antechamber-directory" \
+    "       ${0##*/} --summonings-directory" \
+    "       ${0##*/} --intent-overrides-path" \
     "       ${0##*/} --session-name --name <bare-familiar-name>" \
     "       ${0##*/} --request-path --name <bare-familiar-name>" \
     "       ${0##*/} --response-path --name <bare-familiar-name>" >&2
@@ -130,7 +173,7 @@ familiar_paths_main() {
 
   while (($#)); do
     case "$1" in
-      --directory|--antechamber-directory|--session-name|--request-path|--response-path)
+      --directory|--antechamber-directory|--summonings-directory|--intent-overrides-path|--session-name|--request-path|--response-path)
         [[ -z $output_kind ]] || familiar_paths_fail 'Choose one output option.'
         output_kind=$1
         shift
@@ -163,13 +206,22 @@ familiar_paths_main() {
   readonly storage_directory
   familiar_validate_storage_directory "$storage_directory" || familiar_paths_fail 'FAMILIAR_HOME must be an absolute path.'
 
-  if [[ $output_kind == '--directory' || $output_kind == '--antechamber-directory' ]]; then
+  if [[ $output_kind == '--directory' || $output_kind == '--antechamber-directory' || $output_kind == '--summonings-directory' || $output_kind == '--intent-overrides-path' ]]; then
     [[ -z $familiar_name ]] || familiar_paths_fail '--name is not used with directory output options'
-    if [[ $output_kind == '--directory' ]]; then
-      printf '%s\n' "$storage_directory"
-    else
-      familiar_antechamber_directory
-    fi
+    case "$output_kind" in
+      --directory)
+        printf '%s\n' "$storage_directory"
+        ;;
+      --antechamber-directory)
+        familiar_antechamber_directory
+        ;;
+      --summonings-directory)
+        familiar_summonings_directory
+        ;;
+      --intent-overrides-path)
+        familiar_intent_overrides_path
+        ;;
+    esac
     return
   fi
 
@@ -184,10 +236,7 @@ familiar_paths_main() {
       familiar_session_name "$familiar_timestamp" "$familiar_name"
       ;;
     --request-path)
-      local antechamber_directory
-      antechamber_directory=$(familiar_antechamber_directory) || familiar_paths_fail 'Could not resolve the antechamber directory.'
-      readonly antechamber_directory
-      mkdir -p -- "$antechamber_directory" || familiar_paths_fail "Could not create the antechamber directory: $antechamber_directory"
+      familiar_ensure_home_layout || familiar_paths_fail 'Could not create the Familiar home layout.'
       familiar_staged_request_path "$familiar_name"
       ;;
     --response-path)

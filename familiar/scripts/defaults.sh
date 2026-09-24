@@ -7,6 +7,10 @@ readonly SCRIPT_DIRECTORY
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIRECTORY/lib/harness.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIRECTORY/paths.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIRECTORY/lib/intent-overrides.sh"
 
 usage() {
   printf 'Usage: %s --harness <harness> --intent <planning|implementation|review>\n' "${0##*/}" >&2
@@ -60,8 +64,17 @@ main() {
     fail 'The --intent option is required.'
   }
   familiar_harness_load "$harness" || exit 1
-  if ! pair=$(familiar_harness_intent_pair "$intent"); then
-    fail "Unknown intent for Familiar harness $harness: $intent (expected planning, implementation, or review)"
+  familiar_ensure_home_layout || fail 'Could not create the Familiar home layout.'
+  if pair=$(familiar_intent_override_pair "$harness" "$intent"); then
+    :
+  else
+    local override_status=$?
+    if (( override_status > 1 )); then
+      exit "$override_status"
+    fi
+    if ! pair=$(familiar_harness_intent_pair "$intent"); then
+      fail "Unknown intent for Familiar harness $harness: $intent (expected planning, implementation, or review)"
+    fi
   fi
   readonly pair
   read -r model effort extra <<< "$pair"

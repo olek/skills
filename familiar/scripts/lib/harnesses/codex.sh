@@ -19,13 +19,13 @@ familiar_harness_intent_pair() {
 
   case "$intent" in
     planning)
-      printf 'gpt-5.6-sol medium\n'
+      printf 'gpt-5.6-terra medium\n'
       ;;
     review)
-      printf 'gpt-5.6-sol high\n'
+      printf 'gpt-5.6-sol medium\n'
       ;;
     implementation)
-      printf 'gpt-5.6-sol low\n'
+      printf 'gpt-5.6-luna high\n'
       ;;
     *)
       return 1

@@ -25,7 +25,7 @@ test_familiar_status() {
   historical_timestamp='250101-1234'
   delivered_response=$(response_path_for "$delivered_name")
   invalid_response=$(response_path_for "$invalid_name")
-  historical_response="$status_storage/$historical_timestamp-rs-$historical_name.md"
+  historical_response="$status_storage/summonings/$historical_timestamp-rs-$historical_name.md"
   touch -- "$delivered_response" "$historical_response"
   mkdir -p -- "$invalid_response"
   reset_fake_tmux
@@ -41,7 +41,7 @@ test_familiar_status() {
   assert_contains "$status_output" 'Managed Familiar: status-awaiting (claude, pane %5, awaiting response)'
   assert_contains "$status_output" 'Managed Familiar: status-invalid (claude, pane %7, response path invalid)'
   assert_contains "$status_output" 'Managed Familiar: status-dead (codex, pane %8, ended without response)'
-  assert_contains "$status_output" "  request: $status_storage/$historical_timestamp-rq-$historical_name.md"
+  assert_contains "$status_output" "  request: $status_storage/summonings/$historical_timestamp-rq-$historical_name.md"
   assert_contains "$status_output" "  response: $historical_response"
   assert_not_contains "$status_output" 'other-summoner'
   FAMILIAR_HOME="$status_storage"
