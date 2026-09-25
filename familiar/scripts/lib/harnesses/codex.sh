@@ -7,7 +7,7 @@ familiar_harness_executable() {
 }
 
 familiar_harness_models() {
-  printf '%s\n' gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna gpt-5.5
+  printf '%s\n' gpt-6-sol gpt-6-luna gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna gpt-5.5
 }
 
 familiar_harness_efforts() {
