@@ -128,8 +128,8 @@ report_invalid_metadata() {
   local -r familiar_harness=$2
   local -r familiar_id=$3
 
-  printf 'Managed Familiar: %s (%s, pane %s, invalid metadata)\n' \
-    "$familiar_name" "$familiar_harness" "$familiar_id"
+  printf 'Managed Familiar: %s (%s, %s %s, invalid metadata)\n' \
+    "$familiar_name" "$familiar_harness" "$(familiar_display_noun)" "$familiar_id"
   printf '  request: unavailable\n  response: unavailable\n'
 }
 
@@ -157,11 +157,11 @@ report_familiars() {
     IFS=$'\t' read -r request_file response_file <<< "$derived_paths"
 
     if [[ $familiar_closed == 1 && ! -f $response_file ]]; then
-      printf 'Managed Familiar: %s (%s, pane %s, ended without response)\n' \
-        "$familiar_name" "$familiar_harness" "$familiar_id"
+      printf 'Managed Familiar: %s (%s, %s %s, ended without response)\n' \
+        "$familiar_name" "$familiar_harness" "$(familiar_display_noun)" "$familiar_id"
     else
-      printf 'Managed Familiar: %s (%s, pane %s, %s)\n' \
-        "$familiar_name" "$familiar_harness" "$familiar_id" "$(response_status "$response_file")"
+      printf 'Managed Familiar: %s (%s, %s %s, %s)\n' \
+        "$familiar_name" "$familiar_harness" "$(familiar_display_noun)" "$familiar_id" "$(response_status "$response_file")"
     fi
     printf '  request: %s\n  response: %s\n' "$request_file" "$response_file"
   done < <(familiar_managed_familiars "$summoner_id")
@@ -234,16 +234,16 @@ wait_for_auto_dismiss() {
   while true; do
     familiar_id=$(open_familiar_id "$summoner_id")
     if [[ -z $familiar_id ]]; then
-      printf 'Auto-dismiss ended: the Familiar pane is closed.\n'
+      printf 'Auto-dismiss ended: the Familiar %s is closed.\n' "$(familiar_display_noun)"
       return 0
     fi
 
     remaining_seconds=$((inspection_seconds - (SECONDS - started_at_seconds)))
     if (( remaining_seconds <= 0 )); then
       if familiar_close_familiar "$familiar_id"; then
-        printf 'Auto-dismissed Familiar pane %s after %s seconds of user inspection.\n' "$familiar_id" "$inspection_seconds"
+        printf 'Auto-dismissed Familiar %s %s after %s seconds of user inspection.\n' "$(familiar_display_noun)" "$familiar_id" "$inspection_seconds"
       else
-        printf 'Auto-dismiss ended: the Familiar pane was already closed.\n'
+        printf 'Auto-dismiss ended: the Familiar %s was already closed.\n' "$(familiar_display_noun)"
       fi
       return 0
     fi

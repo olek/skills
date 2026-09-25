@@ -44,7 +44,7 @@ main() {
   if ! familiar_close_familiar "$familiar_id"; then
     fail "Could not dismiss Familiar $familiar_name in pane $familiar_id."
   fi
-  printf 'Dismissed Familiar %s in pane %s.\n' "$familiar_name" "$familiar_id"
+  printf 'Dismissed Familiar %s in %s %s.\n' "$familiar_name" "$(familiar_display_noun)" "$familiar_id"
 }
 
 main "$@"

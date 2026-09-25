@@ -45,3 +45,11 @@ familiar_resolve_live_familiar() {
 familiar_close_familiar() {
   familiar_backend_close_familiar "$1"
 }
+
+familiar_display_noun() {
+  if declare -F familiar_backend_display_noun >/dev/null; then
+    familiar_backend_display_noun
+  else
+    printf 'pane'
+  fi
+}

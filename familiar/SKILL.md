@@ -1,12 +1,12 @@
 ---
 name: familiar
-description: Summon a named Codex or Claude Code Familiar in a visible tmux pane when the user explicitly requests a named familiar, sidekick, companion, or sub-agent, or says "summon the Familiar".
+description: Summon a named Codex or Claude Code Familiar in a visible terminal pane when the user explicitly requests a named familiar, sidekick, companion, or sub-agent, or says "summon the Familiar".
 ---
 
 # Familiar
 
-A Familiar is one named, interactive agent in its own visible tmux pane beside
-the pane that summoned it: you summon it, watch it, talk to it, and dismiss it,
+A Familiar is one named, interactive agent in its own visible terminal pane beside
+the session that summoned it: you summon it, watch it, talk to it, and dismiss it,
 one companion at a time.
 
 Use this skill when the user asks to create, summon, launch, assign, follow up
@@ -50,6 +50,15 @@ End the request with the target harness, effective model, and effective effort,
 each marked specified or inferred. For an omitted override, write `Harness
 configured default; no launcher override`.
 
+## Terminal backend
+
+tmux is the established backend. iTerm2 support is experimental and has not
+been tested on a Mac. Automatic selection uses tmux whenever `TMUX` is set,
+even if tmux runs inside iTerm2. It uses iTerm2 only in a direct iTerm2 session.
+If neither is available, the scripts fail with a terminal-backend error. Do not
+claim iTerm2 works until the Mac validation gates in [README.md](README.md)
+pass.
+
 ## Summon
 
 Confirm the task is well defined, then run the launcher. `--harness` selects the
@@ -69,9 +78,9 @@ For Codex sessions whose workspace sandbox cannot access the tmux socket, see
   [--effort target-harness-effort]
 ```
 
-Report the printed pane ID and paths. Keep the Familiar interactive and visible.
+Report the printed terminal target ID and paths. Keep the Familiar interactive and visible.
 The Familiar writes its complete result to the response path and announces
-completion in its pane when done.
+completion in its terminal pane when done.
 
 ## Harness and model policy
 
@@ -101,7 +110,7 @@ Omit the corresponding `--model` or `--effort` launcher option; never pass
 <skill-dir>/scripts/status.sh
 ```
 
-Reports the Familiar tied to the current summoning agent - its harness, pane,
+Reports the Familiar tied to the current summoning agent - its harness, terminal target,
 request and response paths, and delivery state - so you need not pass an
 identifier.
 

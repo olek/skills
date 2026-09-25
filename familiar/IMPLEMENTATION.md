@@ -1,12 +1,14 @@
 # Familiar: implementation notes
 
-The concrete mechanics behind [DESIGN.md](DESIGN.md): the scripts, the naming
-scheme, pane options, and the catalogs. SKILL.md is the operational source of
-truth; correct this file when they disagree.
+The concrete mechanics behind [DESIGN.md](DESIGN.md): the scripts, naming
+scheme, terminal backend metadata, and catalogs. SKILL.md is the
+operational source of truth; correct this file when they disagree.
 
 ## Components
 
-tmux is the substrate; the scripts are small and single-purpose:
+Terminal backends provide the pane operations; the scripts are small and
+single-purpose. tmux is established. iTerm2 is experimental and has not been
+tested on a Mac:
 
 - **`scripts/paths.sh`** - source of truth for the Familiar home,
   antechamber, `YYMMDD-HHMM` naming, bare-name validation, and
@@ -17,20 +19,25 @@ tmux is the substrate; the scripts are small and single-purpose:
 - **`scripts/summon.sh`** - validates name and inputs, captures the local
   time to the minute, promotes the staged request to its durable path, derives the
   response path, enforces one Familiar per summoning agent, and opens the harness
-  pane. On pane or metadata failure it closes the partial pane and restores the
-  staged request when possible.
+  pane. On launch failure it restores the staged request after verified cleanup;
+  an iTerm2 rollback failure preserves the promoted request for recovery.
 - **`scripts/message.sh`** - validates one message, resolves the live
-  managed Familiar associated with the current summoning pane from tmux metadata,
-  sends the text, waits a fixed 100 ms, and sends Enter as separate tmux
-  operations. It never waits for delivery or changes request, response, or
-  completion state.
+  managed Familiar associated with the current summoning session from backend
+  metadata, sends the text, waits a fixed 100 ms, and sends Enter separately.
+  It never waits for delivery or changes request, response, or completion state.
 - **`scripts/dismiss.sh`** - resolves exactly one live managed Familiar
-  for the current summoning pane and closes it. It accepts no pane ID and rejects
-  zero, closed-only, or multiple live matches.
-- **`scripts/lib/pane.sh`** - source-only module for scoped managed-pane
-  lookup, single-live-pane resolution, and closing a resolved pane. Message and
-  dismissal share the strict resolution guard; status shares its lookup and close
-  operations while retaining its reporting semantics.
+  for the current summoning session and closes it. It accepts no target ID and
+  rejects zero, closed-only, or multiple live matches.
+- **`scripts/lib/familiar.sh`** - transport-neutral managed-record lookup,
+  single-live-target resolution, and scoped close policy.
+- **`scripts/lib/backend.sh`** - selects tmux when `TMUX` is set, then iTerm2
+  when `ITERM_SESSION_ID` is set, and fails clearly when neither is available.
+  `FAMILIAR_BACKEND` can request a specific backend, subject to its context check.
+- **`scripts/lib/backends/tmux.sh`** - established tmux implementation.
+- **`scripts/lib/backends/iterm2.sh`** and **`iterm2-bridge.py`** - experimental
+  one-shot Python API adapter. It resolves the inherited origin ID exactly,
+  splits with startup profile settings, and stores a managed record on the
+  origin session. This path has fake API tests only; it is untested on a Mac.
 - **`scripts/lib/harness.sh`** - source-only module that discovers
   harness definitions by scanning `scripts/lib/harnesses/*.sh` (no central list),
   loads the selected definition, and provides the shell-quoting helper.
@@ -39,7 +46,7 @@ tmux is the substrate; the scripts are small and single-purpose:
   intent suggestions, and pane-command builder, per the contract in
   `scripts/lib/harnesses/README.md`. Add a harness by dropping in one file.
 - **`scripts/status.sh`** - finds the current agent's Familiar, derives
-  paths from its pane metadata, and reports name, harness, pane, paths, and
+  paths from backend metadata, and reports name, harness, target, paths, and
   delivery state. `--wait` polls quietly until delivery or failure; `--auto-dismiss`
   extends that one invocation (see below).
 - **`scripts/models.sh`** - prints only model IDs, one per line.
@@ -56,6 +63,7 @@ tmux is the substrate; the scripts are small and single-purpose:
   fakes live in `tests/lib/`; focused lifecycle, harness, path, summon, message,
   dismissal, and status tests live in `tests/cases/`. The suite uses fake tmux
   and harness executables on `PATH` and never touches a real tmux server.
+  `tests/cases/iterm2.sh` uses a persistent fake iTerm2 Python API.
 
 ## Naming and storage
 
@@ -93,7 +101,7 @@ create an override file.
 
 The launcher injects a fixed prompt into the Familiar: read the request, stay in
 scope, write the complete result once to the derived response path when done, and
-announce completion in the pane. The response path is never placed in the request
+announce completion in the terminal pane. The response path is never placed in the request
 itself. That single durable write keeps the result decoupled from the live pane.
 
 ## Harness and model policy
@@ -108,10 +116,10 @@ implementation, or review - maps to a complete model-effort pair returned by
 takes precedence over the harness definition's built-in pair. The file uses one
 strictly parsed entry per pair: `<harness>.<intent> = <model> <effort>`.
 
-## Pane metadata
+## Backend metadata
 
-The launcher tags the pane with tmux options that the status script reads, so the
-skill stays stateless - the pane is the record:
+The tmux adapter tags the pane with options that the status script reads - the
+pane is the tmux record:
 
 | Option | Meaning |
 | --- | --- |
@@ -127,6 +135,12 @@ derive them even after midnight or when `FAMILIAR_HOME` differs in a later
 process. The summoner pane ID bounds the singleton and status lookup to the main
 harness instance, following it across tmux windows. A pane missing harness
 metadata is reported as `unknown`.
+
+The experimental iTerm2 adapter stores name, timestamp, harness, canonical
+Familiar home, origin ID, and target ID in a variable on the invoking session.
+The target ID is resolved through the API for closed status. This record is not
+guaranteed across iTerm2 restart. Exact origin mapping, startup settings, and
+closed-target lookup still require live Mac validation.
 
 ## Session naming
 

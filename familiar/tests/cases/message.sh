@@ -105,7 +105,7 @@ test_familiar_message() {
 
   tmux_validation_output=''
   if tmux_validation_output=$(env PATH="$FAKE_BIN:$PATH" HOME="$TEST_HOME" \
-    FAMILIAR_HOME="$message_storage" TMUX='' TMUX_PANE='%1' \
+    FAMILIAR_HOME="$message_storage" FAMILIAR_BACKEND=tmux TMUX='' TMUX_PANE='%1' \
     "$MESSAGE" --message hello 2>&1); then
     fail_test 'expected message delivery outside tmux to fail'
   fi

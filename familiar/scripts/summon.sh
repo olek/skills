@@ -173,6 +173,11 @@ resolve_paths() {
 ensure_no_managed_familiar() {
   local -r summoner_id=$1
 
+  if declare -F familiar_backend_can_launch >/dev/null; then
+    familiar_backend_can_launch "$summoner_id" || exit 1
+    return
+  fi
+
   if familiar_managed_familiars "$summoner_id" | awk 'NF { found = 1 } END { exit found ? 0 : 1 }'; then
     fail 'This summoning agent instance already has a managed Familiar; close it before summoning another.'
   fi
@@ -226,7 +231,13 @@ main() {
   mv --no-clobber -- "$staged_request_file" "$request_file" || fail "Could not promote staged request: $staged_request_file"
   [[ ! -e $staged_request_file ]] || fail "Request path already exists; staged request was preserved: $request_file"
   local familiar_id
-  if ! familiar_id=$(familiar_backend_launch_familiar "$summoner_id" "$working_directory" "$familiar_command" "$familiar_name_input" "$familiar_timestamp" "$harness" "$storage_directory"); then
+  if familiar_id=$(familiar_backend_launch_familiar "$summoner_id" "$working_directory" "$familiar_command" "$familiar_name_input" "$familiar_timestamp" "$harness" "$storage_directory"); then
+    :
+  else
+    local launch_status=$?
+    if (( launch_status == 3 )); then
+      fail "Familiar target cleanup failed; preserve the promoted request and reconcile the iTerm2 target before retrying: $request_file"
+    fi
     if [[ ! -e $staged_request_file ]] && mv --no-clobber -- "$request_file" "$staged_request_file"; then
       fail "Could not launch the Familiar; restored the staged request: $staged_request_file"
     fi

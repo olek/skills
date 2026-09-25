@@ -75,7 +75,7 @@ main() {
   if ! familiar_backend_submit "$familiar_id"; then
     fail "Message text was delivered to Familiar $familiar_name in pane $familiar_id, but Enter failed; the message may remain unsubmitted."
   fi
-  printf 'Sent message to Familiar %s in pane %s.\n' "$familiar_name" "$familiar_id"
+  printf 'Sent message to Familiar %s in %s %s.\n' "$familiar_name" "$(familiar_display_noun)" "$familiar_id"
 }
 
 main "$@"

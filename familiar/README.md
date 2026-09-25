@@ -1,9 +1,10 @@
 # Familiar
 
-A Familiar is one named, interactive agent that runs in its own tmux pane beside
-the session that summoned it. Unlike a headless sub-agent, you watch it reason,
-correct it mid-task, answer its questions, and dismiss it - one companion at a
-time, in view and in conversation.
+A Familiar is one named, interactive agent that runs in a visible terminal pane
+beside the session that summoned it. tmux is the established backend. iTerm2
+support is experimental and has not been tested on a Mac. Unlike a headless
+sub-agent, you watch it reason, correct it mid-task, answer its questions, and
+dismiss it - one companion at a time, in view and in conversation.
 
 This README is for people using the plugin. For how the agent drives it, see
 [SKILL.md](SKILL.md); for why it is built this way and how to extend it, see
@@ -37,15 +38,15 @@ harness; it may hand read-only lookups to cheaper headless helpers.
 The public wrappers are `scripts/summon.sh` for launching,
 `scripts/status.sh` for delivery state, `scripts/message.sh` for follow-ups,
 and `scripts/dismiss.sh` for dismissal. The follow-up and dismissal
-wrappers resolve the managed pane from tmux metadata, so they do not accept an
-arbitrary pane target.
+wrappers resolve the managed pane from metadata on the selected terminal backend,
+so they do not accept an arbitrary pane target.
 
 Check delivery with `scripts/status.sh`. To wait for completion, invoke
 `scripts/status.sh --wait` once; add `--auto-dismiss` to dismiss a remaining live
 pane after its inspection interval.
 
 Send a follow-up with `scripts/message.sh --message '<text>'`. It
-requires exactly one live managed Familiar for the current summoning pane.
+requires exactly one live managed Familiar for the current summoning terminal session.
 
 Dismiss that Familiar with `scripts/dismiss.sh`. It accepts no pane ID
 and rejects zero, closed-only, or multiple live matches.
@@ -88,6 +89,8 @@ defaults, or launches a summon. The override file remains optional.
 | --- | --- |
 | `FAMILIAR_HOME` | Absolute directory for the Familiar home, containing `antechamber`, `config`, and `summonings`. Overrides the built-in default. |
 | `FAMILIAR_AUTO_DISMISS_SECONDS` | Seconds a delivered pane stays open for inspection before it is automatically dismissed, up to 60 (the default). |
+| `FAMILIAR_BACKEND` | `auto` (default), `tmux`, or `iterm2`. Automatic selection uses tmux whenever `TMUX` is set, then iTerm2 when `ITERM_SESSION_ID` is set; otherwise scripts fail with a terminal-backend error. |
+| `FAMILIAR_ITERM2_PYTHON` | Python 3 executable with the `iterm2` package for the experimental iTerm2 backend. |
 
 ### Intent overrides
 
@@ -111,6 +114,18 @@ strict: duplicate or malformed lines make the defaults lookup fail.
 
 ## Requirements
 
-Modern Linux with Bash, tmux, GNU core utilities, and the selected harness CLI
-(`codex`, `claude`, `opencode`, or `agy`) on `PATH`. macOS and Windows are
-currently untested.
+The tmux backend requires Bash, tmux, GNU core utilities, and the selected
+harness CLI (`codex`, `claude`, `opencode`, or `agy`) on `PATH`.
+
+The iTerm2 backend is experimental and has not been tested on a Mac. It requires
+a local logged-in macOS iTerm2 session, Bash 4.3 or newer, GNU coreutils `realpath` and `mv` on `PATH` (put the Homebrew
+`gnubin` directory first), and a Python 3 executable with the `iterm2` package.
+Enable iTerm2's Python API and grant the external script Automation permission.
+Set `FAMILIAR_ITERM2_PYTHON` if that Python executable is not `python3`.
+Automatic selection uses tmux whenever `TMUX` is set, even inside iTerm2; it
+uses iTerm2 only in a direct iTerm2 session. `FAMILIAR_BACKEND` can override
+automatic selection, subject to the selected backend context check. The iTerm2
+backend cannot run from inside tmux. Its managed record lives on the invoking iTerm2 session and is not guaranteed across app
+restart. Live Mac validation is still required before relying on this backend:
+confirm `ITERM_SESSION_ID` maps to the Python session ID, split profile startup
+and working directory, close-on-end lookup, and Automation permissions.

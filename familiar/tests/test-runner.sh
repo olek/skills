@@ -21,6 +21,8 @@ source "$SCRIPT_DIRECTORY/cases/message.sh"
 source "$SCRIPT_DIRECTORY/cases/dismiss.sh"
 # shellcheck source=tests/cases/status.sh
 source "$SCRIPT_DIRECTORY/cases/status.sh"
+# shellcheck source=tests/cases/iterm2.sh
+source "$SCRIPT_DIRECTORY/cases/iterm2.sh"
 
 main() {
   test_familiar_lifecycle
@@ -30,6 +32,12 @@ main() {
   test_familiar_message
   test_familiar_dismiss
   test_familiar_status
+  test_iterm2
+  test_iterm2_lifecycle
+  test_iterm2_failures
+  test_iterm2_origin_and_retry
+  test_iterm2_auto_selection
+  test_no_terminal_backend
   printf 'All Familiar tests passed.\n'
 }
 
