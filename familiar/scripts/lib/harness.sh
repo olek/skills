@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Shared Familiar harness discovery, loading, and command quoting.
-set -euo pipefail
 
 FAMILIAR_HARNESS_SCRIPT_DIRECTORY=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 readonly FAMILIAR_HARNESS_SCRIPT_DIRECTORY
@@ -10,6 +9,13 @@ shell_quote() {
   local escaped_value=$1
   escaped_value=${escaped_value//\'/\'"\'"\'}
   printf "'%s'" "$escaped_value"
+}
+
+familiar_harness_append_option() {
+  local -n command_ref=$1
+  local -r flag=$2 value=$3
+  [[ -n $value ]] || return 0
+  printf -v command_ref '%s %s %s' "$command_ref" "$flag" "$(shell_quote "$value")"
 }
 
 familiar_harness_name_for_file() {
@@ -30,14 +36,7 @@ familiar_harness_all() {
 
 familiar_harness_is_known() {
   local -r requested_harness=${1:-}
-  local harness_file
-
-  [[ -n $requested_harness ]] || return 1
-  for harness_file in "$FAMILIAR_HARNESS_DIRECTORY"/*.sh; do
-    [[ -f $harness_file ]] || continue
-    [[ ${harness_file##*/} == "$requested_harness.sh" ]] && return 0
-  done
-  return 1
+  [[ -n $requested_harness && $requested_harness != */* && -f $FAMILIAR_HARNESS_DIRECTORY/$requested_harness.sh ]]
 }
 
 familiar_harness_load() {

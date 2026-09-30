@@ -1,6 +1,7 @@
+# shellcheck shell=bash
 test_familiar_message() {
-  local message_storage="$OVERRIDE_STORAGE"
-  local FAMILIAR_HOME="$message_storage"
+  local message_home="$OVERRIDE_HOME"
+  local FAMILIAR_HOME="$message_home"
   local message_name
   local message_request
   local message_response
@@ -20,15 +21,15 @@ test_familiar_message() {
   local tmux_validation_output
 
   [[ -x $MESSAGE ]] || fail_test 'expected the Familiar message script to be executable'
-  FAMILIAR_HOME="$message_storage"
+  FAMILIAR_HOME="$message_home"
   message_name='message-target'
-  message_request=$(create_request "$message_name" "$message_storage")
+  message_request=$(create_request "$message_name" "$message_home")
   message_response=$(response_path_for "$message_name")
   message_text='-follow-up text'
   reset_fake_tmux
-  write_pane '%20' '1' "$message_name" "$TIMESTAMP" codex "$message_storage" '%1' '0'
-  write_pane '%21' '1' 'other-summoner-message' "$TIMESTAMP" codex "$message_storage" '%99' '0'
-  write_pane '%22' '1' 'closed-message' "$TIMESTAMP" codex "$message_storage" '%1' '1'
+  write_pane '%20' '1' "$message_name" "$TIMESTAMP" codex "$message_home" '%1' '0'
+  write_pane '%21' '1' 'other-summoner-message' "$TIMESTAMP" codex "$message_home" '%99' '0'
+  write_pane '%22' '1' 'closed-message' "$TIMESTAMP" codex "$message_home" '%1' '1'
   message_state_before=$(<"$FAKE_TMUX_STATE")
   message_output=$(run_message --message "$message_text")
   assert_contains "$message_output" "Sent message to Familiar $message_name in pane %20."
@@ -41,7 +42,7 @@ test_familiar_message() {
   [[ ! -e $message_response ]] || fail_test 'message delivery created the response file'
 
   reset_fake_tmux
-  write_pane '%23' '1' 'closed-only' "$TIMESTAMP" codex "$message_storage" '%1' '1'
+  write_pane '%23' '1' 'closed-only' "$TIMESTAMP" codex "$message_home" '%1' '1'
   closed_output=''
   if closed_output=$(run_message --message 'hello' 2>&1); then
     fail_test 'expected a message to fail when only closed Familiars exist'
@@ -58,8 +59,8 @@ test_familiar_message() {
   assert_equals "$(<"$FAKE_TMUX_SEND_KEYS_ARGS")" ''
 
   reset_fake_tmux
-  write_pane '%24' '1' 'first-live' "$TIMESTAMP" codex "$message_storage" '%1' '0'
-  write_pane '%25' '1' 'second-live' "$TIMESTAMP" codex "$message_storage" '%1' '0'
+  write_pane '%24' '1' 'first-live' "$TIMESTAMP" codex "$message_home" '%1' '0'
+  write_pane '%25' '1' 'second-live' "$TIMESTAMP" codex "$message_home" '%1' '0'
   multiple_output=''
   if multiple_output=$(run_message --message 'hello' 2>&1); then
     fail_test 'expected a message to fail when multiple live Familiars exist'
@@ -68,7 +69,7 @@ test_familiar_message() {
   assert_equals "$(<"$FAKE_TMUX_SEND_KEYS_ARGS")" ''
 
   reset_fake_tmux
-  write_pane '%26' '1' "$message_name" "$TIMESTAMP" codex "$message_storage" '%1' '0'
+  write_pane '%26' '1' "$message_name" "$TIMESTAMP" codex "$message_home" '%1' '0'
   FAKE_TMUX_FAIL_SEND_KEYS='1'
   first_send_failure_output=''
   if first_send_failure_output=$(run_message --message 'hello' 2>&1); then
@@ -79,7 +80,7 @@ test_familiar_message() {
   assert_equals "$(<"$FAKE_TMUX_SEND_KEYS_COUNT")" '1'
 
   reset_fake_tmux
-  write_pane '%27' '1' "$message_name" "$TIMESTAMP" codex "$message_storage" '%1' '0'
+  write_pane '%27' '1' "$message_name" "$TIMESTAMP" codex "$message_home" '%1' '0'
   FAKE_TMUX_FAIL_SEND_KEYS='2'
   enter_failure_output=''
   if enter_failure_output=$(run_message --message 'hello' 2>&1); then
@@ -105,7 +106,7 @@ test_familiar_message() {
 
   tmux_validation_output=''
   if tmux_validation_output=$(env PATH="$FAKE_BIN:$PATH" HOME="$TEST_HOME" \
-    FAMILIAR_HOME="$message_storage" FAMILIAR_BACKEND=tmux TMUX='' TMUX_PANE='%1' \
+    FAMILIAR_HOME="$message_home" FAMILIAR_BACKEND=tmux TMUX='' TMUX_PANE='%1' \
     "$MESSAGE" --message hello 2>&1); then
     fail_test 'expected message delivery outside tmux to fail'
   fi
@@ -113,7 +114,7 @@ test_familiar_message() {
 
   tmux_validation_output=''
   if tmux_validation_output=$(env PATH="$FAKE_BIN:$PATH" HOME="$TEST_HOME" \
-    FAMILIAR_HOME="$message_storage" TMUX=1 TMUX_PANE='' \
+    FAMILIAR_HOME="$message_home" TMUX=1 TMUX_PANE='' \
     "$MESSAGE" --message hello 2>&1); then
     fail_test 'expected message delivery without a tmux pane to fail'
   fi

@@ -3,9 +3,14 @@
 
 FAMILIAR_ITERM2_BRIDGE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/iterm2-bridge.py
 readonly FAMILIAR_ITERM2_BRIDGE
+# shellcheck disable=SC1091
+source "${FAMILIAR_ITERM2_BRIDGE%/*}/../../paths.sh"
 
 familiar_iterm2_call() {
-  "${FAMILIAR_ITERM2_PYTHON:-python3}" "$FAMILIAR_ITERM2_BRIDGE" "$@"
+  local home
+  home=$(familiar_home) || return 1
+  FAMILIAR_CANONICAL_HOME=$(realpath -m -- "$home") \
+    "${FAMILIAR_ITERM2_PYTHON:-python3}" "$FAMILIAR_ITERM2_BRIDGE" "$@"
 }
 
 familiar_backend_require_context() {
@@ -30,20 +35,20 @@ familiar_backend_can_launch() {
 }
 
 familiar_backend_launch_familiar() {
-  local -r origin=$1 cwd=$2 command=$3 name=$4 timestamp=$5 harness=$6 home=$7
-  printf '%s' "$command" | familiar_iterm2_call launch "$origin" "$cwd" "$name" "$timestamp" "$harness" "$home"
+  local -r summoner_id=$1 cwd=$2 command=$3 name=$4 timestamp=$5 harness=$6 home=$7
+  printf '%s' "$command" | familiar_iterm2_call launch "$summoner_id" "$cwd" "$name" "$timestamp" "$harness" "$home"
 }
 
 familiar_backend_send_literal() {
-  printf '%s' "$2" | familiar_iterm2_call send "${ITERM_SESSION_ID#*:}" "$1"
+  printf '%s' "$2" | familiar_iterm2_call send "$(familiar_backend_summoner_id)" "$1"
 }
 
 familiar_backend_submit() {
-  familiar_iterm2_call submit "${ITERM_SESSION_ID#*:}" "$1"
+  familiar_iterm2_call submit "$(familiar_backend_summoner_id)" "$1"
 }
 
 familiar_backend_close_familiar() {
-  familiar_iterm2_call close "${ITERM_SESSION_ID#*:}" "$1"
+  familiar_iterm2_call close "$(familiar_backend_summoner_id)" "$1"
 }
 
 familiar_backend_display_noun() { printf 'session'; }

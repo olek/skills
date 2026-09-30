@@ -36,15 +36,14 @@ main() {
   local summoner_id
 
   parse_arguments "$@"
-  familiar_backend_require_context || exit 1
-  summoner_id=$(familiar_backend_summoner_id)
+  summoner_id=$(familiar_current_summoner_id) || exit 1
   readonly summoner_id
   familiar_resolve_live_familiar familiar_name familiar_id "$summoner_id" || exit 1
   readonly familiar_name familiar_id
-  if ! familiar_close_familiar "$familiar_id"; then
-    fail "Could not dismiss Familiar $familiar_name in $(familiar_display_noun) $familiar_id."
+  if ! familiar_backend_close_familiar "$familiar_id"; then
+    fail "Could not dismiss Familiar $familiar_name in $(familiar_backend_display_noun) $familiar_id."
   fi
-  printf 'Dismissed Familiar %s in %s %s.\n' "$familiar_name" "$(familiar_display_noun)" "$familiar_id"
+  printf 'Dismissed Familiar %s in %s %s.\n' "$familiar_name" "$(familiar_backend_display_noun)" "$familiar_id"
 }
 
 main "$@"

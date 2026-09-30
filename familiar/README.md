@@ -1,78 +1,36 @@
 # Familiar
 
-A Familiar is one named, interactive agent that runs in a visible terminal pane
-beside the session that summoned it. tmux is the established backend. iTerm2
-support is experimental and has not been tested on a Mac. Unlike a headless
-sub-agent, you watch it reason, correct it mid-task, answer its questions, and
-dismiss it - one companion at a time, in view and in conversation.
+A Familiar is one named, interactive agent in a visible terminal beside the
+summoner terminal. tmux is established. iTerm2 is experimental, untested on a
+Mac, and likely not working yet. You can watch, guide, and dismiss the Familiar.
 
-This README is for people using the plugin. For how the agent drives it, see
-[SKILL.md](SKILL.md); for why it is built this way and how to extend it, see
-[DESIGN.md](DESIGN.md).
+## Ask for a Familiar
 
-## Summoning one
+Ask your agent to summon a named Familiar and describe its task. You may choose
+`codex`, `claude`, `opencode`, or `antigravity`, plus a model and effort. The
+Familiar's harness is independent of the summoner's. You can interact directly
+in its terminal while it works. It writes its complete result to a response file.
 
-Ask your Claude Code or Codex session for a named familiar, sidekick, companion,
-or sub-agent, or just say "summon the Familiar", and describe the task. The
-summoning agent writes a self-contained request, opens the pane, and reports
-where the Familiar lives. Ordinary headless sub-agents still handle background
-parallel work you did not ask to see.
+Only Claude uses the launch session name. Codex, OpenCode, and Antigravity keep
+their own session identifiers.
 
-## Mixing harnesses and models
-
-The Familiar's engine is independent of your own: a Codex session can summon a
-Claude Familiar and vice versa. By default the summoning agent reuses its own
-harness, but you can name `codex`, `claude`, `opencode`, or `antigravity` and
-pick the model and reasoning effort supported by that harness. Without an
-explicit choice or matching intent entry, the target harness uses its
-configured model and effort. Explicit values are passed through unchanged,
-without translation between vendors.
-
-## Working with the pane
-
-The Familiar runs its native TUI in a real pane, not a log. Read along, type
-corrections, and answer its prompts directly. When it finishes it writes the
-complete result to a response file and says so in the pane. It makes every file
-change itself and inherits the permission defaults configured locally for its
-harness; it may hand read-only lookups to cheaper headless helpers.
-
-The public wrappers are `scripts/summon.sh` for launching,
-`scripts/status.sh` for delivery state, `scripts/message.sh` for follow-ups,
-and `scripts/dismiss.sh` for dismissal. The follow-up and dismissal
-wrappers resolve the managed pane from metadata on the selected terminal
-backend, so they do not accept an arbitrary pane target.
-
-Check delivery with `scripts/status.sh`. To wait for completion, invoke
-`scripts/status.sh --wait` once; add `--auto-dismiss` to dismiss a remaining
-live pane after its inspection interval.
-
-Send a follow-up with `scripts/message.sh --message '<text>'`. It
-requires exactly one live managed Familiar for the current summoning terminal
-session.
-
-Dismiss that Familiar with `scripts/dismiss.sh`. It accepts no pane ID
-and rejects zero, closed-only, or multiple live matches.
-
-## Spotting the session
-
-A Claude Familiar launches with a readable session name
-(`YYMMDD-HHMM-fm-<name>`), so the session picker, window title, and status line
-show a label instead of a UUID. Codex has no launch-time naming flag, so a
-Codex Familiar keeps its default identifier unless you rename it from its TUI.
-
-## Where things live
-
-Requests and responses are durable files under the Familiar home's
-`summonings` subdirectory. Before launch, your request waits briefly in the
-`antechamber` subdirectory under an untimestamped name; at summon time it is
-promoted to a timestamped path so same-day artifacts sort chronologically:
-
-| File | Name |
+| Script | Purpose |
 | --- | --- |
-| request | `YYMMDD-HHMM-rq-<name>.md` |
-| response | `YYMMDD-HHMM-rs-<name>.md` |
+| `scripts/paths.sh --request-path --name <name>` | Stage a request path |
+| `scripts/defaults.sh --harness <harness> --intent <intent>` | Resolve model and effort |
+| `scripts/summon.sh` | Launch a Familiar |
+| `scripts/status.sh` | Report delivery or wait |
+| `scripts/message.sh` | Send a follow-up |
+| `scripts/dismiss.sh` | Close the current Familiar terminal |
 
-The default layout is:
+The agent procedure and exact options are in [SKILL.md](SKILL.md).
+
+## Familiar home
+
+The default home is `~/.familiar`; `FAMILIAR_HOME` overrides it with an absolute
+path. The request is staged at `antechamber/<name>.md`. On summon it moves to
+`summonings/YYMMDD-HHMM-rq-<name>.md`; the response uses the same timestamp and
+`rs` in place of `rq`.
 
 ```text
 ~/.familiar/
@@ -80,79 +38,57 @@ The default layout is:
   config/
     intent.conf
   summonings/
+  recovery/
 ```
 
-Familiar creates these directories when it prepares a request, resolves intent
-defaults, or launches a summon. The intent file remains optional.
+The path query, defaults lookup, and launcher create the base layout. The iTerm2
+bridge creates `recovery/` when it needs a launch journal.
 
 ## Configuration
 
-- `FAMILIAR_HOME`: Absolute Familiar home containing `antechamber`, `config`,
-  and `summonings`. Overrides the built-in default.
-- `FAMILIAR_AUTO_DISMISS_SECONDS`: Seconds a delivered pane stays open for
-  inspection before automatic dismissal, up to 60 (the default).
-- `FAMILIAR_BACKEND`: `auto` (default), `tmux`, or `iterm2`. Automatic selection
-  uses tmux when `TMUX` is set, then iTerm2 when `ITERM_SESSION_ID` is set.
-  Otherwise scripts fail with a terminal-backend error.
-- `FAMILIAR_ITERM2_PYTHON`: Python 3 executable with the `iterm2` package for
-  the experimental iTerm2 backend.
+- `FAMILIAR_HOME`: Familiar home.
+- `FAMILIAR_BACKEND`: `auto`, `tmux`, or `iterm2`. Auto uses tmux if `TMUX` is
+  set, then a direct iTerm2 session if `ITERM_SESSION_ID` is set.
+- `FAMILIAR_AUTO_DISMISS_SECONDS`: Inspection interval, at most 60 seconds.
+- `FAMILIAR_ITERM2_PYTHON`: Python 3 executable with the `iterm2` package.
 
-### Intent configuration
-
-To select a model and effort by task intent, create
-`<FAMILIAR_HOME>/config/intent.conf` (or
-`~/.familiar/config/intent.conf` when `FAMILIAR_HOME` is unset).
-Each non-comment entry configures one harness and intent with one model-effort
-pair:
+Optional `config/intent.conf` entries have this form:
 
 ```ini
-# <harness>.<intent> = <model> <effort>
 codex.planning = my-planning-model medium
 claude.review = my-review-model high
-antigravity.implementation = my-implementation-model low
+opencode.implementation = provider/my-model default
 ```
 
-The harness key matches the name passed to `--harness`, including `antigravity`
-and `opencode`. Valid intents are `planning`, `implementation`, and `review`.
-Either value may be `default`, which leaves that setting to the selected
-harness. OpenCode supports a model override, but its TUI does not support a
-launch-time effort override, so its entries use `default` for effort:
-
-```ini
-opencode.planning = provider/my-model default
-```
-
-Without a matching entry, both values come from the harness. Unknown
-harnesses, duplicate entries, and malformed lines make the defaults lookup
-fail.
-
-`scripts/defaults.sh --harness <harness> --intent <intent>` reports the
-resolved model and effort, whether the file exists, every missing intent for
-the selected harness, and the file's absolute path. A missing requested entry
-uses the target harness's configured defaults. After the summon, the summoning
-agent offers to create the file or add all missing entries with you while the
-Familiar works. Your choices apply to later summons.
+Valid intents are `planning`, `implementation`, and `review`. `default` lets the
+harness choose that setting. OpenCode's TUI does not support an effort override.
+Malformed lines and unknown harnesses fail lookup. Duplicate entries fail
+lookup for every harness and intent.
 
 ## Requirements
 
-The tmux backend requires Bash, tmux, GNU core utilities, and the selected
-harness CLI (`codex`, `claude`, `opencode`, or `agy`) on `PATH`.
+The tmux backend needs Bash, tmux, GNU core utilities, and the selected harness
+CLI on `PATH` (`codex`, `claude`, `opencode`, or `agy`).
 
-The iTerm2 backend is experimental and has not been tested on a Mac. It
-requires a local logged-in macOS iTerm2 session, Bash 4.3 or newer, GNU
-coreutils `realpath` and `mv` on `PATH` (put the Homebrew `gnubin` directory
-first), and a Python 3 executable with the `iterm2` package.
-Enable iTerm2's Python API and grant the external script Automation permission.
-Set `FAMILIAR_ITERM2_PYTHON` if that Python executable is not `python3`.
-Automatic selection uses tmux whenever `TMUX` is set, even inside iTerm2; it
-uses iTerm2 only in a direct iTerm2 session. `FAMILIAR_BACKEND` can override
-automatic selection, subject to the selected backend context check. The iTerm2
-backend cannot run from inside tmux. Its managed record lives on the invoking
-iTerm2 session. During launch, a recovery journal under
-`FAMILIAR_HOME/recovery` blocks another launch if target cleanup fails. Keep
-the promoted request and use `dismiss.sh` from the same origin session to close
-the recorded target before retrying. The session record is not guaranteed
-across app restart. Live Mac validation is still required before relying on
-this backend:
-confirm `ITERM_SESSION_ID` maps to the Python session ID, split profile startup
-and working directory, close-on-end lookup, and Automation permissions.
+### iTerm2 (experimental)
+
+Untested on a Mac. It needs a logged-in macOS iTerm2 session, Bash 4.3 or newer,
+GNU `realpath` and `mv`, Python 3 with `iterm2`, and Python API and Automation
+permissions. It cannot run inside tmux. A launch journal at
+`recovery/<sha256(summoner id)>.json` blocks a new launch when cleanup fails.
+Use `dismiss.sh` from the same summoner session to close the recorded Familiar.
+The record may not survive app restart.
+
+Before relying on this backend, validate on a Mac:
+
+- `ITERM_SESSION_ID` maps exactly to the Python API session ID.
+- Splitting starts the command in the requested working directory.
+- Close-on-end status and scoped dismissal work.
+- Python API and Automation permissions work for an external script.
+
+## Documentation
+
+[SKILL.md](SKILL.md) is the agent procedure; [DESIGN.md](DESIGN.md) explains the
+boundaries; [IMPLEMENTATION.md](IMPLEMENTATION.md) describes the scripts and
+state; the [harness contract](scripts/lib/harnesses/README.md) and
+[backend contract](scripts/lib/backends/README.md) guide extensions.

@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 # Apply transport-neutral policy to Familiars managed by one summoner.
 
-familiar_managed_familiars() {
-  # Each normalized record is: familiar_id, name, timestamp, harness, home, closed.
-  familiar_backend_list_familiars "$1"
-}
-
 familiar_resolve_live_familiar() {
   local -n familiar_name_ref=$1
   local -n familiar_id_ref=$2
@@ -17,7 +12,7 @@ familiar_resolve_live_familiar() {
   local managed_count=0
   local familiars
 
-  familiars=$(familiar_managed_familiars "$summoner_id") || return 1
+  familiars=$(familiar_backend_list_familiars "$summoner_id") || return 1
 
   while IFS=$'\t' read -r candidate_familiar_id candidate_familiar_name _ _ _ candidate_closed; do
     [[ -n $candidate_familiar_id ]] || continue
@@ -42,17 +37,5 @@ familiar_resolve_live_familiar() {
   if (( live_count != 1 )); then
     printf 'Multiple live managed Familiars are associated with summoner %s.\n' "$summoner_id" >&2
     return 1
-  fi
-}
-
-familiar_close_familiar() {
-  familiar_backend_close_familiar "$1"
-}
-
-familiar_display_noun() {
-  if declare -F familiar_backend_display_noun >/dev/null; then
-    familiar_backend_display_noun
-  else
-    printf 'pane'
   fi
 }

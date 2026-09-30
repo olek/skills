@@ -23,10 +23,24 @@ familiar_backend_summoner_id() {
   printf '%s\n' "$TMUX_PANE"
 }
 
+familiar_backend_can_launch() {
+  local -r summoner_id=$1
+  if familiar_backend_list_familiars "$summoner_id" | awk 'NF { found = 1 } END { exit found ? 0 : 1 }'; then
+    printf 'This summoning agent instance already has a managed Familiar; close it before summoning another.\n' >&2
+    return 1
+  fi
+}
+
+familiar_backend_display_noun() { printf 'pane'; }
+
 familiar_backend_list_familiars() {
   local -r summoner_id=$1
 
-  tmux list-panes -a -F $'#{pane_id}\t#{@familiar}\t#{@familiar_name}\t#{@familiar_timestamp}\t#{@familiar_harness}\t#{@familiar_home}\t#{@familiar_summoner_pane}\t#{pane_dead}' \
+  local format
+  printf -v format '#{pane_id}\t#{%s}\t#{%s}\t#{%s}\t#{%s}\t#{%s}\t#{%s}\t#{pane_dead}' \
+    "$FAMILIAR_TMUX_OPTION" "$FAMILIAR_TMUX_NAME_OPTION" "$FAMILIAR_TMUX_TIMESTAMP_OPTION" \
+    "$FAMILIAR_TMUX_HARNESS_OPTION" "$FAMILIAR_TMUX_HOME_OPTION" "$FAMILIAR_TMUX_SUMMONER_OPTION"
+  tmux list-panes -a -F "$format" \
     | awk -F '\t' -v summoner="$summoner_id" '
       $2 == "1" && $7 == summoner {
         harness = $5
@@ -44,7 +58,7 @@ familiar_backend_launch_familiar() {
   local -r familiar_name=$4
   local -r familiar_timestamp=$5
   local -r harness=$6
-  local -r storage_directory=$7
+  local -r home=$7
   local window_id
   local pane_id
 
@@ -52,36 +66,42 @@ familiar_backend_launch_familiar() {
   if ! pane_id=$(tmux split-window -h -c "$working_directory" -t "$window_id" -P -F '#{pane_id}' "$command"); then
     return 1
   fi
-  if ! tmux set-option -p -t "$pane_id" "$FAMILIAR_TMUX_NAME_OPTION" "$familiar_name" \
-    || ! tmux set-option -p -t "$pane_id" "$FAMILIAR_TMUX_TIMESTAMP_OPTION" "$familiar_timestamp" \
-    || ! tmux set-option -p -t "$pane_id" "$FAMILIAR_TMUX_HARNESS_OPTION" "$harness" \
-    || ! tmux set-option -p -t "$pane_id" "$FAMILIAR_TMUX_HOME_OPTION" "$storage_directory" \
-    || ! tmux set-option -p -t "$pane_id" "$FAMILIAR_TMUX_SUMMONER_OPTION" "$summoner_id" \
-    || ! tmux set-option -p -t "$pane_id" "$FAMILIAR_TMUX_OPTION" 1; then
-    tmux kill-pane -t "$pane_id" >/dev/null 2>&1 || true
-    return 1
-  fi
+  local option value
+  local -a metadata=(
+    "$FAMILIAR_TMUX_NAME_OPTION" "$familiar_name"
+    "$FAMILIAR_TMUX_TIMESTAMP_OPTION" "$familiar_timestamp"
+    "$FAMILIAR_TMUX_HARNESS_OPTION" "$harness"
+    "$FAMILIAR_TMUX_HOME_OPTION" "$home"
+    "$FAMILIAR_TMUX_SUMMONER_OPTION" "$summoner_id"
+    "$FAMILIAR_TMUX_OPTION" 1
+  )
+  while ((${#metadata[@]})); do
+    option=${metadata[0]}
+    value=${metadata[1]}
+    if ! tmux set-option -p -t "$pane_id" "$option" "$value"; then
+      tmux kill-pane -t "$pane_id" >/dev/null 2>&1 || true
+      return 1
+    fi
+    metadata=("${metadata[@]:2}")
+  done
   printf '%s\n' "$pane_id"
 }
 
 familiar_backend_send_literal() {
   local -r familiar_id=$1
   local -r literal_text=$2
-  local -r pane_id=$familiar_id
 
-  tmux send-keys -t "$pane_id" -l -- "$literal_text"
+  tmux send-keys -t "$familiar_id" -l -- "$literal_text"
 }
 
 familiar_backend_submit() {
   local -r familiar_id=$1
-  local -r pane_id=$familiar_id
 
-  tmux send-keys -t "$pane_id" C-m
+  tmux send-keys -t "$familiar_id" C-m
 }
 
 familiar_backend_close_familiar() {
   local -r familiar_id=$1
-  local -r pane_id=$familiar_id
 
-  tmux kill-pane -t "$pane_id"
+  tmux kill-pane -t "$familiar_id"
 }

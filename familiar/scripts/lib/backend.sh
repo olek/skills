@@ -19,3 +19,8 @@ case ${FAMILIAR_BACKEND:-auto} in
   iterm2) source "$FAMILIAR_BACKEND_DIRECTORY/iterm2.sh" ;;
   *) printf 'Unknown Familiar backend: %s\n' "$FAMILIAR_BACKEND" >&2; return 1 ;;
 esac
+
+familiar_current_summoner_id() {
+  familiar_backend_require_context || return 1
+  familiar_backend_summoner_id
+}

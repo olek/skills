@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 test_familiar_lifecycle() {
   local generic_policy_output
   local generic_multiple_output
@@ -10,7 +11,7 @@ test_familiar_lifecycle() {
     name=""; familiar=""
     familiar_resolve_live_familiar name familiar summoner
     printf "resolved:%s:%s\\n" "$name" "$familiar"
-    familiar_close_familiar "$familiar"
+    familiar_backend_close_familiar "$familiar"
   ' -- "$FAMILIAR_POLICY" 2>&1) || fail_test 'expected lifecycle resolution to succeed'
   assert_equals "$generic_policy_output" $'resolved:fake-familiar:familiar-1\nclosed:familiar-1'
 

@@ -1,6 +1,7 @@
+# shellcheck shell=bash
 test_familiar_dismiss() {
-  local message_storage="$OVERRIDE_STORAGE"
-  local FAMILIAR_HOME="$message_storage"
+  local message_home="$OVERRIDE_HOME"
+  local FAMILIAR_HOME="$message_home"
   local dismiss_name='dismiss-target'
   local dismiss_output
   local dismiss_state_before
@@ -12,8 +13,8 @@ test_familiar_dismiss() {
 
   [[ -x $DISMISS ]] || fail_test 'expected the Familiar dismissal script to be executable'
   reset_fake_tmux
-  write_pane '%28' '1' "$dismiss_name" "$TIMESTAMP" codex "$message_storage" '%1' '0'
-  write_pane '%29' '1' 'other-summoner-dismiss' "$TIMESTAMP" codex "$message_storage" '%99' '0'
+  write_pane '%28' '1' "$dismiss_name" "$TIMESTAMP" codex "$message_home" '%1' '0'
+  write_pane '%29' '1' 'other-summoner-dismiss' "$TIMESTAMP" codex "$message_home" '%99' '0'
   dismiss_output=$(run_dismiss)
   assert_contains "$dismiss_output" "Dismissed Familiar $dismiss_name in pane %28."
   assert_file_contains "$FAKE_TMUX_CALLS" 'kill-pane'
@@ -21,7 +22,7 @@ test_familiar_dismiss() {
   assert_file_contains "$FAKE_TMUX_STATE" '%29'
 
   reset_fake_tmux
-  write_pane '%30' '1' "$dismiss_name" "$TIMESTAMP" codex "$message_storage" '%1' '0'
+  write_pane '%30' '1' "$dismiss_name" "$TIMESTAMP" codex "$message_home" '%1' '0'
   dismiss_state_before=$(<"$FAKE_TMUX_STATE")
   arbitrary_target_output=''
   if arbitrary_target_output=$(run_dismiss '%99' 2>&1); then
@@ -40,7 +41,7 @@ test_familiar_dismiss() {
   assert_file_not_contains "$FAKE_TMUX_CALLS" 'kill-pane'
 
   reset_fake_tmux
-  write_pane '%31' '1' 'closed-dismiss' "$TIMESTAMP" codex "$message_storage" '%1' '1'
+  write_pane '%31' '1' 'closed-dismiss' "$TIMESTAMP" codex "$message_home" '%1' '1'
   closed_dismiss_output=''
   if closed_dismiss_output=$(run_dismiss 2>&1); then
     fail_test 'expected dismissal to fail when only closed Familiars exist'
@@ -49,8 +50,8 @@ test_familiar_dismiss() {
   assert_file_not_contains "$FAKE_TMUX_CALLS" 'kill-pane'
 
   reset_fake_tmux
-  write_pane '%32' '1' 'first-live-dismiss' "$TIMESTAMP" codex "$message_storage" '%1' '0'
-  write_pane '%33' '1' 'second-live-dismiss' "$TIMESTAMP" codex "$message_storage" '%1' '0'
+  write_pane '%32' '1' 'first-live-dismiss' "$TIMESTAMP" codex "$message_home" '%1' '0'
+  write_pane '%33' '1' 'second-live-dismiss' "$TIMESTAMP" codex "$message_home" '%1' '0'
   multiple_dismiss_output=''
   if multiple_dismiss_output=$(run_dismiss 2>&1); then
     fail_test 'expected dismissal to fail when multiple live Familiars exist'

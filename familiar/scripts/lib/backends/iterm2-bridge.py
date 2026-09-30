@@ -15,9 +15,9 @@ class BridgeError(Exception):
     pass
 
 
-def recovery_path(origin_id):
-    home = Path(os.environ.get("FAMILIAR_HOME") or Path.home() / ".familiar").resolve()
-    digest = hashlib.sha256(origin_id.encode()).hexdigest()
+def recovery_path(summoner_id):
+    home = Path(os.environ["FAMILIAR_CANONICAL_HOME"])
+    digest = hashlib.sha256(summoner_id.encode()).hexdigest()
     return home / "recovery" / (digest + ".json")
 
 
@@ -44,120 +44,145 @@ def clear_recovery(path):
     path.unlink(missing_ok=True)
 
 
+def ensure_can_launch(app, record, marker, path, message):
+    if marker:
+        raise BridgeError("iTerm2 Familiar session needs recovery before another launch: " + str(path))
+    if record and app.get_session_by_id(record["familiar"]):
+        raise BridgeError(message)
+
+
+async def close_and_clear(familiar, marker_path):
+    await familiar.async_close(force=True)
+    clear_recovery(marker_path)
+
+
+def op_list(app, record, marker, marker_path):
+    record = marker or record
+    if not record:
+        return
+    if not record.get("familiar"):
+        raise BridgeError("iTerm2 launch needs recovery before the Familiar session ID was recorded: " + str(marker_path))
+    familiar = app.get_session_by_id(record["familiar"])
+    print("\t".join((record["familiar"], record["name"], record["timestamp"], record["harness"], record["home"], "0" if familiar else "1")))
+
+
+def op_can_launch(app, record, marker, marker_path):
+    ensure_can_launch(app, record, marker, marker_path,
+                      "This summoning agent instance already has a managed Familiar; close it before summoning another")
+
+
+async def op_launch(iterm2, app, summoner, summoner_id, record, marker, marker_path, rest):
+    ensure_can_launch(app, record, marker, marker_path,
+                      "A managed Familiar is still live or needs recovery")
+    cwd, name, timestamp, harness, home = rest
+    command = sys.stdin.read()
+    new_record = dict(summoner=summoner_id, familiar="", name=name, timestamp=timestamp, harness=harness, home=home)
+    profile = iterm2.LocalWriteOnlyProfile()
+    profile.set_command(command)
+    profile.set_use_custom_command("Yes")
+    profile.set_custom_directory(cwd)
+    profile.set_initial_directory_mode(iterm2.InitialWorkingDirectory.INITIAL_WORKING_DIRECTORY_CUSTOM)
+    profile.set_close_sessions_on_end(True)
+    write_recovery(marker_path, new_record)
+    try:
+        familiar = await summoner.async_split_pane(vertical=True, before=False, profile_customizations=profile)
+    except Exception:
+        clear_recovery(marker_path)
+        raise
+    if familiar is None or not familiar.session_id:
+        clear_recovery(marker_path)
+        raise BridgeError("iTerm2 split returned no Familiar session")
+    new_record["familiar"] = familiar.session_id
+    try:
+        write_recovery(marker_path, new_record)
+    except Exception as error:
+        try:
+            await close_and_clear(familiar, marker_path)
+        except Exception as cleanup_error:
+            print("Recovery required for iTerm2 Familiar session %s after journal update failure: %s; cleanup: %s." % (familiar.session_id, error, cleanup_error), file=sys.stderr)
+            return 3
+        raise BridgeError("Recovery journal update failed; Familiar session closed: " + str(error))
+    try:
+        await summoner.async_set_variable(VARIABLE, new_record)
+        if await summoner.async_get_variable(VARIABLE) != new_record:
+            raise BridgeError("iTerm2 did not retain Familiar metadata")
+    except Exception as error:
+        try:
+            await familiar.async_close(force=True)
+            if await summoner.async_get_variable(VARIABLE) != record:
+                await summoner.async_set_variable(VARIABLE, record)
+            clear_recovery(marker_path)
+        except Exception as cleanup_error:
+            print("Recovery required for iTerm2 Familiar session %s: %s." % (familiar.session_id, cleanup_error), file=sys.stderr)
+            return 3
+        raise BridgeError("Metadata failed; Familiar session closed: " + str(error))
+    try:
+        clear_recovery(marker_path)
+    except Exception as error:
+        print("Recovery required for iTerm2 Familiar session %s; could not clear the recovery journal: %s." % (familiar.session_id, error), file=sys.stderr)
+        return 3
+    print(familiar.session_id)
+
+
+async def op_owned(app, summoner, record, marker, marker_path, operation, rest):
+    record = marker or record
+    if not record or not rest or record["familiar"] != rest[0]:
+        raise BridgeError("Familiar is not owned by the invoking iTerm2 session")
+    familiar = app.get_session_by_id(record["familiar"])
+    if familiar is None:
+        raise BridgeError("Managed Familiar session is closed")
+    if operation == "send":
+        await familiar.async_send_text(sys.stdin.read(), suppress_broadcast=True)
+    elif operation == "submit":
+        await familiar.async_send_text("\r", suppress_broadcast=True)
+    elif operation == "close":
+        await familiar.async_close(force=True)
+        if await summoner.async_get_variable(VARIABLE) == record:
+            await summoner.async_set_variable(VARIABLE, None)
+        if marker:
+            clear_recovery(marker_path)
+
+
 async def operate(iterm2, args):
-    operation, origin_id, *rest = args
+    operation, summoner_id, *rest = args
     connection = await iterm2.Connection.async_create()
     app = await iterm2.async_get_app(connection, create_if_needed=False)
     if app is None:
         raise BridgeError("No local iTerm2 GUI connection is available")
-    origin = app.get_session_by_id(origin_id)
-    if origin is None or origin.session_id != origin_id:
-        raise BridgeError("Invoking iTerm2 session ID does not resolve exactly: " + origin_id)
-    record = await origin.async_get_variable(VARIABLE)
+    summoner = app.get_session_by_id(summoner_id)
+    if summoner is None or summoner.session_id != summoner_id:
+        raise BridgeError("Invoking iTerm2 session ID does not resolve exactly: " + summoner_id)
+    record = await summoner.async_get_variable(VARIABLE)
     if isinstance(record, str):
         record = json.loads(record)
-    if record and record.get("origin") != origin_id:
-        raise BridgeError("Managed record belongs to another origin")
-    marker_path = recovery_path(origin_id)
+    if record and record.get("summoner") != summoner_id:
+        raise BridgeError("Managed record belongs to another summoner")
+    marker_path = recovery_path(summoner_id)
     marker = json.loads(marker_path.read_text()) if marker_path.exists() else None
-    if marker and marker.get("origin") != origin_id:
-        raise BridgeError("Recovery record belongs to another origin")
-    if operation == "check":
-        return
-    if operation == "list":
-        record = marker or record
-        if record:
-            if not record.get("target"):
-                raise BridgeError("iTerm2 launch needs recovery before the target ID was recorded: " + str(marker_path))
-            target = app.get_session_by_id(record["target"])
-            print("\t".join((record["target"], record["name"], record["timestamp"], record["harness"], record["home"], "0" if target else "1")))
-        return
-    if operation == "can-launch":
-        if marker:
-            raise BridgeError("iTerm2 target needs recovery before another launch: " + str(marker_path))
-        if record and (app.get_session_by_id(record["target"]) or record.get("recovery")):
-            raise BridgeError("This summoning agent instance already has a managed Familiar; close it before summoning another")
-        return
-    if operation == "launch":
-        if marker:
-            raise BridgeError("iTerm2 target needs recovery before another launch: " + str(marker_path))
-        cwd, name, timestamp, harness, home = rest
-        if record and (app.get_session_by_id(record["target"]) or record.get("recovery")):
-            raise BridgeError("A managed Familiar is still live or needs recovery")
-        command = sys.stdin.read()
-        new_record = dict(origin=origin_id, target="", name=name, timestamp=timestamp, harness=harness, home=home)
-        profile = iterm2.LocalWriteOnlyProfile()
-        profile.set_command(command)
-        profile.set_use_custom_command("Yes")
-        profile.set_custom_directory(cwd)
-        profile.set_initial_directory_mode(iterm2.InitialWorkingDirectory.INITIAL_WORKING_DIRECTORY_CUSTOM)
-        profile.set_close_sessions_on_end(True)
-        write_recovery(marker_path, new_record)
-        try:
-            target = await origin.async_split_pane(vertical=True, before=False, profile_customizations=profile)
-        except Exception:
-            clear_recovery(marker_path)
-            raise
-        if target is None or not target.session_id:
-            clear_recovery(marker_path)
-            raise BridgeError("iTerm2 split returned no target session")
-        new_record["target"] = target.session_id
-        try:
-            write_recovery(marker_path, new_record)
-        except Exception as error:
-            try:
-                await target.async_close(force=True)
-                clear_recovery(marker_path)
-            except Exception as cleanup_error:
-                print("Recovery required for iTerm2 target %s after journal update failure: %s; cleanup: %s" % (target.session_id, error, cleanup_error), file=sys.stderr)
-                return 3
-            raise BridgeError("Recovery journal update failed; target closed: " + str(error))
-        try:
-            await origin.async_set_variable(VARIABLE, new_record)
-            if await origin.async_get_variable(VARIABLE) != new_record:
-                raise BridgeError("iTerm2 did not retain Familiar metadata")
-        except Exception as error:
-            try:
-                await target.async_close(force=True)
-                if await origin.async_get_variable(VARIABLE) != record:
-                    await origin.async_set_variable(VARIABLE, record)
-                clear_recovery(marker_path)
-            except Exception as cleanup_error:
-                print("Recovery required for iTerm2 target %s: %s" % (target.session_id, cleanup_error), file=sys.stderr)
-                return 3
-            raise BridgeError("Metadata failed; target closed: " + str(error))
-        try:
-            clear_recovery(marker_path)
-        except Exception as error:
-            print("Recovery required for iTerm2 target %s; could not clear the recovery journal: %s" % (target.session_id, error), file=sys.stderr)
-            return 3
-        print(target.session_id)
-        return
-    record = marker or record
-    if not record or not rest or record["target"] != rest[0]:
-        raise BridgeError("Target is not owned by the invoking iTerm2 session")
-    target = app.get_session_by_id(record["target"])
-    if target is None:
-        raise BridgeError("Managed iTerm2 target is closed")
-    if operation == "send":
-        await target.async_send_text(sys.stdin.read(), suppress_broadcast=True)
-    elif operation == "submit":
-        await target.async_send_text("\r", suppress_broadcast=True)
-    elif operation == "close":
-        await target.async_close(force=True)
-        if marker:
-            if await origin.async_get_variable(VARIABLE) == record:
-                await origin.async_set_variable(VARIABLE, None)
-            clear_recovery(marker_path)
-    else:
+    if marker and marker.get("summoner") != summoner_id:
+        raise BridgeError("Recovery record belongs to another summoner")
+    operations = {
+        "check": lambda: None,
+        "list": lambda: op_list(app, record, marker, marker_path),
+        "can-launch": lambda: op_can_launch(app, record, marker, marker_path),
+        "launch": lambda: op_launch(iterm2, app, summoner, summoner_id, record, marker, marker_path, rest),
+        "send": lambda: op_owned(app, summoner, record, marker, marker_path, operation, rest),
+        "submit": lambda: op_owned(app, summoner, record, marker, marker_path, operation, rest),
+        "close": lambda: op_owned(app, summoner, record, marker, marker_path, operation, rest),
+    }
+    if operation not in operations:
         raise BridgeError("Unknown iTerm2 operation: " + operation)
+    result = operations[operation]()
+    if asyncio.iscoroutine(result):
+        return await result
+    return result
 
 
 def main():
     try:
         import iterm2
     except ImportError as error:
-        print("iTerm2 Python package unavailable: " + str(error), file=sys.stderr)
+        print("iTerm2 Python package unavailable: " + str(error) + ".", file=sys.stderr)
         return 1
     try:
         result = asyncio.run(operate(iterm2, sys.argv[1:]))
@@ -168,7 +193,7 @@ def main():
             message = "iTerm2 Python API permission denied (401); enable API access and allow Automation"
         elif "refused" in message.lower() or "connect" in message.lower():
             message = "iTerm2 Python API connection failed; enable the API and check the local GUI: " + message
-        print(message, file=sys.stderr)
+        print(message.rstrip(".") + ".", file=sys.stderr)
         return 1
 
 

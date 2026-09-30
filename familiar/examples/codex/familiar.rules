@@ -6,20 +6,20 @@
 prefix_rule(
     pattern=["<codex-home>/skills/familiar/scripts/summon.sh"],
     decision="allow",
-    justification="The Familiar launcher connects to the current tmux Unix socket.",
+    justification="The Familiar launcher uses the selected terminal backend.",
 )
 prefix_rule(
     pattern=["<codex-home>/skills/familiar/scripts/status.sh"],
     decision="allow",
-    justification="Familiar status reads managed-pane metadata from the current tmux Unix socket.",
+    justification="Familiar status reads managed terminal metadata through the selected backend.",
 )
 prefix_rule(
     pattern=["<codex-home>/skills/familiar/scripts/message.sh"],
     decision="allow",
-    justification="Familiar follow-up delivery uses the current tmux Unix socket.",
+    justification="Familiar follow-up delivery uses the selected terminal backend.",
 )
 prefix_rule(
     pattern=["<codex-home>/skills/familiar/scripts/dismiss.sh"],
     decision="allow",
-    justification="Familiar dismissal uses the current tmux Unix socket.",
+    justification="Familiar dismissal uses the selected terminal backend.",
 )

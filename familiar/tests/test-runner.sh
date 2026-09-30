@@ -11,6 +11,8 @@ source "$SCRIPT_DIRECTORY/lib/test-helper.sh"
 source "$SCRIPT_DIRECTORY/cases/lifecycle.sh"
 # shellcheck source=tests/cases/harnesses.sh
 source "$SCRIPT_DIRECTORY/cases/harnesses.sh"
+# shellcheck source=tests/cases/defaults.sh
+source "$SCRIPT_DIRECTORY/cases/defaults.sh"
 # shellcheck source=tests/cases/paths.sh
 source "$SCRIPT_DIRECTORY/cases/paths.sh"
 # shellcheck source=tests/cases/summon.sh
@@ -27,21 +29,13 @@ source "$SCRIPT_DIRECTORY/cases/iterm2.sh"
 main() {
   test_familiar_lifecycle
   test_familiar_harnesses
+  test_familiar_defaults
   test_familiar_paths
   test_familiar_summon
   test_familiar_message
   test_familiar_dismiss
   test_familiar_status
-  test_iterm2
-  test_iterm2_lifecycle
-  test_iterm2_failures
-  test_iterm2_origin_and_retry
-  test_iterm2_auto_selection
-  test_no_terminal_backend
-  test_iterm2_list_failure
-  test_iterm2_orphan_recovery
-  test_iterm2_failure_nouns
-  test_iterm2_selection_and_preflight
+  test_familiar_iterm2
   printf 'All Familiar tests passed.\n'
 }
 

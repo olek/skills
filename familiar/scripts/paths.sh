@@ -1,77 +1,29 @@
 #!/usr/bin/env bash
-# Shared Familiar storage, naming, and path derivation.
-#
-# This is the source of truth for the Familiar home, the antechamber, the
-# YYMMDD-HHMM naming convention, bare-name validation, and request/response/
-# session path derivation. Source it from the other Familiar scripts, or run it
-# directly so a summoning agent can ask for a path before summoning a Familiar.
-# The --request-path query also creates the antechamber directory, so the agent
-# can write the returned path without preparing any directory itself.
+# Shared Familiar home, validation, and path derivation.
 
-familiar_storage_directory() {
-  local directory=${FAMILIAR_HOME:-}
-
-  if [[ -z $directory ]]; then
-    [[ -n ${HOME:-} ]] || return 1
-    directory="$HOME/.familiar"
+familiar_home() {
+  local home=${FAMILIAR_HOME:-}
+  if [[ -z $home ]]; then
+    [[ -n ${HOME:-} ]] || { printf 'HOME must be set when FAMILIAR_HOME is not set.\n' >&2; return 1; }
+    home="$HOME/.familiar"
   fi
-
-  printf '%s\n' "$directory"
+  familiar_validate_home "$home" || { printf 'FAMILIAR_HOME must be an absolute path.\n' >&2; return 1; }
+  home=${home%/}
+  [[ -n $home ]] || { printf 'FAMILIAR_HOME must be an absolute path.\n' >&2; return 1; }
+  printf '%s\n' "$home"
 }
 
-familiar_validate_storage_directory() {
-  [[ $1 = /* ]]
-}
-
-familiar_antechamber_directory() {
-  local directory
-
-  directory=$(familiar_storage_directory) || return 1
-  readonly directory
-  familiar_validate_storage_directory "$directory" || return 1
-  printf '%s/antechamber\n' "${directory%/}"
-}
-
-familiar_summonings_directory() {
-  local directory
-
-  directory=$(familiar_storage_directory) || return 1
-  readonly directory
-  familiar_validate_storage_directory "$directory" || return 1
-  printf '%s/summonings\n' "${directory%/}"
-}
-
-familiar_configuration_directory() {
-  local directory
-
-  directory=$(familiar_storage_directory) || return 1
-  readonly directory
-  familiar_validate_storage_directory "$directory" || return 1
-  printf '%s/config\n' "${directory%/}"
-}
+familiar_validate_home() { [[ $1 = /* ]]; }
 
 familiar_intent_config_path() {
-  local configuration_directory
-
-  configuration_directory=$(familiar_configuration_directory) || return 1
-  readonly configuration_directory
-  printf '%s/intent.conf\n' "$configuration_directory"
+  local home
+  home=$(familiar_home) || return 1
+  printf '%s/config/intent.conf\n' "$home"
 }
 
 familiar_ensure_home_layout() {
-  local storage_directory
-  local antechamber_directory
-  local configuration_directory
-  local summonings_directory
-
-  storage_directory=$(familiar_storage_directory) || return 1
-  readonly storage_directory
-  familiar_validate_storage_directory "$storage_directory" || return 1
-  antechamber_directory=$(familiar_antechamber_directory) || return 1
-  configuration_directory=$(familiar_configuration_directory) || return 1
-  summonings_directory=$(familiar_summonings_directory) || return 1
-  readonly antechamber_directory configuration_directory summonings_directory
-  mkdir -p -- "$antechamber_directory" "$configuration_directory" "$summonings_directory"
+  local -r home=$1
+  mkdir -p -- "$home/antechamber" "$home/config" "$home/summonings"
 }
 
 familiar_current_timestamp() {
@@ -116,48 +68,19 @@ familiar_staged_request_filename() {
   printf '%s.md\n' "$familiar_name"
 }
 
-familiar_path_in_storage() {
-  local -r filename=$1
-  local summonings_directory
-
-  summonings_directory=$(familiar_summonings_directory) || return 1
-  readonly summonings_directory
-  familiar_path_in_directory "$summonings_directory" "$filename"
-}
-
-familiar_path_in_directory() {
-  local -r directory=$1
-  local -r filename=$2
-
-  familiar_validate_storage_directory "$directory" || return 1
-  printf '%s/%s\n' "${directory%/}" "$filename"
-}
-
-familiar_request_path() {
-  familiar_path_in_storage "$(familiar_request_filename "$1" "$2")"
-}
-
-familiar_staged_request_path() {
-  local antechamber_directory
-
-  antechamber_directory=$(familiar_antechamber_directory) || return 1
-  readonly antechamber_directory
-  printf '%s/%s\n' "$antechamber_directory" "$(familiar_staged_request_filename "$1")"
-}
-
-familiar_response_path() {
-  familiar_path_in_storage "$(familiar_response_filename "$1" "$2")"
+familiar_summoning_paths() {
+  local -r home=$1 timestamp=$2 name=$3
+  familiar_validate_home "$home" || return 1
+  familiar_validate_timestamp "$timestamp" || return 1
+  familiar_validate_name "$name" || return 1
+  printf '%s\t%s\t%s\n' \
+    "$home/antechamber/$(familiar_staged_request_filename "$name")" \
+    "$home/summonings/$(familiar_request_filename "$timestamp" "$name")" \
+    "$home/summonings/$(familiar_response_filename "$timestamp" "$name")"
 }
 
 familiar_paths_usage() {
-  printf '%s\n' \
-    "Usage: ${0##*/} --directory" \
-    "       ${0##*/} --antechamber-directory" \
-    "       ${0##*/} --summonings-directory" \
-    "       ${0##*/} --intent-config-path" \
-    "       ${0##*/} --session-name --name <bare-familiar-name>" \
-    "       ${0##*/} --request-path --name <bare-familiar-name>" \
-    "       ${0##*/} --response-path --name <bare-familiar-name>" >&2
+  printf 'Usage: %s --request-path --name <bare-familiar-name>\n' "${0##*/}" >&2
 }
 
 familiar_paths_fail() {
@@ -167,82 +90,33 @@ familiar_paths_fail() {
 
 familiar_paths_main() {
   set -euo pipefail
-
-  local output_kind=''
-  local familiar_name=''
-
+  local output_seen=0 name=''
   while (($#)); do
     case "$1" in
-      --directory|--antechamber-directory|--summonings-directory|--intent-config-path|--session-name|--request-path|--response-path)
-        [[ -z $output_kind ]] || familiar_paths_fail 'Choose one output option.'
-        output_kind=$1
-        shift
-        ;;
+      --request-path)
+        (( ! output_seen )) || familiar_paths_fail 'Choose one output option.'
+        output_seen=1
+        shift ;;
       --name)
         (($# >= 2)) || familiar_paths_fail 'Missing value for --name'
-        [[ -z $familiar_name ]] || familiar_paths_fail '--name may be specified once'
-        familiar_name=$2
-        shift 2
-        ;;
+        [[ -z $name ]] || familiar_paths_fail '--name may be specified once'
+        name=$2
+        shift 2 ;;
       --help)
         familiar_paths_usage
-        exit 0
-        ;;
+        exit 0 ;;
       *)
         familiar_paths_usage
-        familiar_paths_fail "Unknown option: $1"
-        ;;
+        familiar_paths_fail "Unknown option: $1" ;;
     esac
   done
-
-  readonly output_kind familiar_name
-  [[ -n $output_kind ]] || {
-    familiar_paths_usage
-    familiar_paths_fail 'An output option is required.'
-  }
-
-  local storage_directory
-  storage_directory=$(familiar_storage_directory) || familiar_paths_fail 'HOME must be set when FAMILIAR_HOME is not set.'
-  readonly storage_directory
-  familiar_validate_storage_directory "$storage_directory" || familiar_paths_fail 'FAMILIAR_HOME must be an absolute path.'
-
-  if [[ $output_kind == '--directory' || $output_kind == '--antechamber-directory' || $output_kind == '--summonings-directory' || $output_kind == '--intent-config-path' ]]; then
-    [[ -z $familiar_name ]] || familiar_paths_fail '--name is not used with directory output options'
-    case "$output_kind" in
-      --directory)
-        printf '%s\n' "$storage_directory"
-        ;;
-      --antechamber-directory)
-        familiar_antechamber_directory
-        ;;
-      --summonings-directory)
-        familiar_summonings_directory
-        ;;
-      --intent-config-path)
-        familiar_intent_config_path
-        ;;
-    esac
-    return
-  fi
-
-  [[ -n $familiar_name ]] || familiar_paths_fail "${output_kind} requires --name <bare-familiar-name>"
-  familiar_validate_name "$familiar_name" || familiar_paths_fail 'Familiar name must be lowercase kebab-case without an fm, rq, or rs prefix.'
-
-  local familiar_timestamp
-  familiar_timestamp=$(familiar_current_timestamp)
-  readonly familiar_timestamp
-  case "$output_kind" in
-    --session-name)
-      familiar_session_name "$familiar_timestamp" "$familiar_name"
-      ;;
-    --request-path)
-      familiar_ensure_home_layout || familiar_paths_fail 'Could not create the Familiar home layout.'
-      familiar_staged_request_path "$familiar_name"
-      ;;
-    --response-path)
-      familiar_response_path "$familiar_timestamp" "$familiar_name"
-      ;;
-  esac
+  (( output_seen )) || familiar_paths_fail 'An output option is required.'
+  [[ -n $name ]] || familiar_paths_fail '--request-path requires --name <bare-familiar-name>'
+  familiar_validate_name "$name" || familiar_paths_fail 'Familiar name must be lowercase kebab-case without an fm, rq, or rs prefix.'
+  local home
+  home=$(familiar_home) || exit 1
+  familiar_ensure_home_layout "$home" || familiar_paths_fail 'Could not create the Familiar home layout.'
+  printf '%s/antechamber/%s\n' "$home" "$(familiar_staged_request_filename "$name")"
 }
 
 if [[ ${BASH_SOURCE[0]} == "$0" ]]; then

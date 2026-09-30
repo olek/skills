@@ -1,6 +1,11 @@
+# shellcheck shell=bash
 test_familiar_status() {
-  local status_storage="$OVERRIDE_STORAGE"
-  local FAMILIAR_HOME="$status_storage"
+  local timeout_only
+  timeout_only=$(run_status --timeout 0 2>&1) && fail_test '--timeout without --wait succeeded'
+  assert_contains "$timeout_only" '--timeout requires --wait'
+
+  local status_home="$OVERRIDE_HOME"
+  local FAMILIAR_HOME="$status_home"
   local FAMILIAR_AUTO_DISMISS_SECONDS=''
   local FAKE_TMUX_AUTO_DISMISS_ENABLED=0
   local delivered_name
@@ -16,7 +21,6 @@ test_familiar_status() {
   local wait_output
   local invalid_output
 
-  FAMILIAR_HOME="$status_storage"
   delivered_name='status-delivered'
   awaiting_name='status-awaiting'
   invalid_name='status-invalid'
@@ -25,48 +29,57 @@ test_familiar_status() {
   historical_timestamp='250101-1234'
   delivered_response=$(response_path_for "$delivered_name")
   invalid_response=$(response_path_for "$invalid_name")
-  historical_response="$status_storage/summonings/$historical_timestamp-rs-$historical_name.md"
+  historical_response="$status_home/summonings/$historical_timestamp-rs-$historical_name.md"
   touch -- "$delivered_response" "$historical_response"
   mkdir -p -- "$invalid_response"
   reset_fake_tmux
-  write_pane '%4' '1' "$delivered_name" "$TIMESTAMP" codex "$status_storage" '%1' '0'
-  write_pane '%5' '1' "$awaiting_name" "$TIMESTAMP" claude "$status_storage" '%1' '0'
-  write_pane '%7' '1' "$invalid_name" "$TIMESTAMP" claude "$status_storage" '%1' '0'
-  write_pane '%8' '1' "$dead_name" "$TIMESTAMP" codex "$status_storage" '%1' '1'
-  write_pane '%9' '1' "$historical_name" "$historical_timestamp" claude "$status_storage" '%1' '0'
-  write_pane '%15' '1' 'other-summoner' "$TIMESTAMP" codex "$status_storage" '%99' '0'
+  write_pane '%4' '1' "$delivered_name" "$TIMESTAMP" codex "$status_home" '%1' '0'
+  write_pane '%5' '1' "$awaiting_name" "$TIMESTAMP" claude "$status_home" '%1' '0'
+  write_pane '%7' '1' "$invalid_name" "$TIMESTAMP" claude "$status_home" '%1' '0'
+  write_pane '%8' '1' "$dead_name" "$TIMESTAMP" codex "$status_home" '%1' '1'
+  write_pane '%9' '1' "$historical_name" "$historical_timestamp" claude "$status_home" '%1' '0'
+  write_pane '%15' '1' 'other-summoner' "$TIMESTAMP" codex "$status_home" '%99' '0'
   FAMILIAR_HOME=''
   status_output=$(run_status)
   assert_contains "$status_output" 'Managed Familiar: status-delivered (codex, pane %4, response delivered)'
   assert_contains "$status_output" 'Managed Familiar: status-awaiting (claude, pane %5, awaiting response)'
   assert_contains "$status_output" 'Managed Familiar: status-invalid (claude, pane %7, response path invalid)'
   assert_contains "$status_output" 'Managed Familiar: status-dead (codex, pane %8, ended without response)'
-  assert_contains "$status_output" "  request: $status_storage/summonings/$historical_timestamp-rq-$historical_name.md"
+  assert_contains "$status_output" "  request: $status_home/summonings/$historical_timestamp-rq-$historical_name.md"
   assert_contains "$status_output" "  response: $historical_response"
   assert_not_contains "$status_output" 'other-summoner'
-  FAMILIAR_HOME="$status_storage"
+  FAMILIAR_HOME="$status_home"
 
   reset_fake_tmux
-  write_pane '%10' '1' "$delivered_name" "$TIMESTAMP" claude "$status_storage" '%1' '0'
+  write_pane '%16' '1' 'Bad_Name' "$TIMESTAMP" codex "$status_home" '%1' '0'
+  status_output=$(run_status)
+  assert_contains "$status_output" '(codex, pane %16, invalid metadata)'
+  assert_contains "$status_output" 'request: unavailable'
+  wait_output=$(run_status --wait --timeout 0)
+  assert_contains "$wait_output" '(codex, pane %16, invalid metadata)'
+  assert_not_contains "$wait_output" 'Timed out'
+
+  reset_fake_tmux
+  write_pane '%10' '1' "$delivered_name" "$TIMESTAMP" claude "$status_home" '%1' '0'
   wait_output=$(run_status --wait --timeout 10)
   assert_not_contains "$wait_output" 'Timed out'
   assert_not_contains "$wait_output" 'Auto-dismiss'
   assert_contains "$wait_output" 'response delivered'
 
   reset_fake_tmux
-  write_pane '%11' '1' "$invalid_name" "$TIMESTAMP" codex "$status_storage" '%1' '0'
+  write_pane '%11' '1' "$invalid_name" "$TIMESTAMP" codex "$status_home" '%1' '0'
   wait_output=$(run_status --wait --timeout 10)
   assert_not_contains "$wait_output" 'Timed out'
   assert_contains "$wait_output" 'response path invalid'
 
   reset_fake_tmux
-  write_pane '%12' '1' "$awaiting_name" "$TIMESTAMP" claude "$status_storage" '%1' '0'
+  write_pane '%12' '1' "$awaiting_name" "$TIMESTAMP" claude "$status_home" '%1' '0'
   wait_output=$(run_status --wait --timeout 0)
   assert_contains "$wait_output" 'Timed out after 0 seconds'
   assert_contains "$wait_output" 'awaiting response'
 
   reset_fake_tmux
-  write_pane '%13' '1' "$delivered_name" "$TIMESTAMP" claude "$status_storage" '%1' '0'
+  write_pane '%13' '1' "$delivered_name" "$TIMESTAMP" claude "$status_home" '%1' '0'
   FAKE_TMUX_AUTO_DISMISS_ENABLED=1
   wait_output=$(run_status --wait --auto-dismiss)
   FAKE_TMUX_AUTO_DISMISS_ENABLED=0
@@ -75,7 +88,7 @@ test_familiar_status() {
   assert_contains "$wait_output" 'No managed Familiar exists for this summoning agent instance.'
 
   reset_fake_tmux
-  write_pane '%14' '1' "$delivered_name" "$TIMESTAMP" claude "$status_storage" '%1' '0'
+  write_pane '%14' '1' "$delivered_name" "$TIMESTAMP" claude "$status_home" '%1' '0'
   FAMILIAR_AUTO_DISMISS_SECONDS='01'
   wait_output=$(run_status --wait --auto-dismiss)
   FAMILIAR_AUTO_DISMISS_SECONDS=''
@@ -113,5 +126,4 @@ test_familiar_status() {
   if run_status --auto-dismiss --timeout 0 >/dev/null 2>&1; then
     fail_test 'expected --auto-dismiss without explicit --wait to fail'
   fi
-
 }

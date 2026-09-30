@@ -24,17 +24,17 @@ readonly FAKE_TMUX_SEND_KEYS_ARGS="$TEST_ROOT/send-keys-args.txt"
 readonly FAKE_TMUX_SEND_KEYS_COUNT="$TEST_ROOT/send-keys-count.txt"
 readonly FAKE_SLEEP_ARGS="$TEST_ROOT/sleep-args.txt"
 readonly TEST_HOME="$TEST_ROOT/home"
-readonly DEFAULT_STORAGE="$TEST_HOME/.familiar"
-readonly DEFAULT_ANTECHAMBER="$DEFAULT_STORAGE/antechamber"
-readonly DEFAULT_SUMMONINGS="$DEFAULT_STORAGE/summonings"
-readonly OVERRIDE_STORAGE="$TEST_ROOT/override familiar home"
-readonly OVERRIDE_ANTECHAMBER="$OVERRIDE_STORAGE/antechamber"
-readonly OVERRIDE_SUMMONINGS="$OVERRIDE_STORAGE/summonings"
+readonly DEFAULT_HOME="$TEST_HOME/.familiar"
+readonly DEFAULT_ANTECHAMBER="$DEFAULT_HOME/antechamber"
+readonly DEFAULT_SUMMONINGS="$DEFAULT_HOME/summonings"
+readonly OVERRIDE_HOME="$TEST_ROOT/override familiar home"
+readonly OVERRIDE_ANTECHAMBER="$OVERRIDE_HOME/antechamber"
+readonly OVERRIDE_SUMMONINGS="$OVERRIDE_HOME/summonings"
 TIMESTAMP=$(date +%y%m%d-%H%M)
 readonly TIMESTAMP
 FAMILIAR_HOME=''
-	FAMILIAR_AUTO_DISMISS_SECONDS=''
-	FAKE_TMUX_AUTO_DISMISS_ENABLED=0
+FAMILIAR_AUTO_DISMISS_SECONDS=''
+FAKE_TMUX_AUTO_DISMISS_ENABLED=0
 FAKE_TMUX_FAIL_COMMAND=''
 FAKE_TMUX_FAIL_SET_OPTION=''
 FAKE_TMUX_FAIL_SEND_KEYS=''
@@ -86,7 +86,7 @@ case "$command_name" in
   list-panes)
     format=${!#}
     if [[ $format == *'#{@familiar_name}'* ]]; then
-	if (( FAKE_TMUX_AUTO_DISMISS_ENABLED )); then
+      if (( FAKE_TMUX_AUTO_DISMISS_ENABLED )); then
         list_count=$(<"$FAKE_TMUX_LIST_COUNT")
         list_count=$((list_count + 1))
         printf '%s\n' "$list_count" > "$FAKE_TMUX_LIST_COUNT"
@@ -95,10 +95,6 @@ case "$command_name" in
         fi
       fi
       cat -- "$FAKE_TMUX_STATE"
-    elif [[ $format == *'#{@familiar_summoner_pane}'* ]]; then
-      awk -F '\t' '{ print $2 "\t" $7 }' "$FAKE_TMUX_STATE"
-    else
-      awk -F '\t' '{ print $2 }' "$FAKE_TMUX_STATE"
     fi
     ;;
   split-window)
@@ -186,97 +182,36 @@ shell_quote() {
   printf "'%s'" "$escaped_value"
 }
 
-run_config() {
+run_with_fakes() {
   env \
-    PATH="$FAKE_BIN:$PATH" \
-    HOME="$TEST_HOME" \
-    FAMILIAR_HOME="$FAMILIAR_HOME" \
-    TEST_TIMESTAMP="$TIMESTAMP" \
-    "$PATHS_SCRIPT" "$@"
-}
-
-run_launcher() {
-  env \
-    PATH="$FAKE_BIN:$PATH" \
-    HOME="$TEST_HOME" \
-    FAMILIAR_HOME="$FAMILIAR_HOME" \
-    TMUX=1 \
-    TMUX_PANE='%1' \
-    FAKE_TMUX_STATE="$FAKE_TMUX_STATE" \
-    FAKE_TMUX_CALLS="$FAKE_TMUX_CALLS" \
-    FAKE_TMUX_OPTIONS="$FAKE_TMUX_OPTIONS" \
-    FAKE_TMUX_SPLIT_ARGS="$FAKE_TMUX_SPLIT_ARGS" \
+    PATH="$FAKE_BIN:$PATH" HOME="$TEST_HOME" FAMILIAR_HOME="$FAMILIAR_HOME" \
+    TMUX=1 TMUX_PANE='%1' \
+    FAKE_TMUX_STATE="$FAKE_TMUX_STATE" FAKE_TMUX_CALLS="$FAKE_TMUX_CALLS" \
+    FAKE_TMUX_OPTIONS="$FAKE_TMUX_OPTIONS" FAKE_TMUX_SPLIT_ARGS="$FAKE_TMUX_SPLIT_ARGS" \
+    FAKE_TMUX_LIST_COUNT="$FAKE_TMUX_LIST_COUNT" \
+    FAKE_TMUX_SEND_KEYS_ARGS="$FAKE_TMUX_SEND_KEYS_ARGS" \
+    FAKE_TMUX_SEND_KEYS_COUNT="$FAKE_TMUX_SEND_KEYS_COUNT" \
     FAKE_TMUX_FAIL_COMMAND="$FAKE_TMUX_FAIL_COMMAND" \
     FAKE_TMUX_FAIL_SET_OPTION="$FAKE_TMUX_FAIL_SET_OPTION" \
-    FAKE_TMUX_SEND_KEYS_ARGS="$FAKE_TMUX_SEND_KEYS_ARGS" \
-    FAKE_TMUX_SEND_KEYS_COUNT="$FAKE_TMUX_SEND_KEYS_COUNT" \
     FAKE_TMUX_FAIL_SEND_KEYS="$FAKE_TMUX_FAIL_SEND_KEYS" \
-		FAKE_TMUX_AUTO_DISMISS_ENABLED="$FAKE_TMUX_AUTO_DISMISS_ENABLED" \
-    TEST_TIMESTAMP="$TIMESTAMP" \
-    "$LAUNCHER" "$@"
+    FAKE_TMUX_AUTO_DISMISS_ENABLED="$FAKE_TMUX_AUTO_DISMISS_ENABLED" \
+    FAMILIAR_AUTO_DISMISS_SECONDS="$FAMILIAR_AUTO_DISMISS_SECONDS" \
+    TEST_TIMESTAMP="$TIMESTAMP" "$@"
 }
 
-run_status() {
-  env \
-    PATH="$FAKE_BIN:$PATH" \
-    HOME="$TEST_HOME" \
-    FAMILIAR_HOME="$FAMILIAR_HOME" \
-    TMUX=1 \
-    TMUX_PANE='%1' \
-    FAKE_TMUX_STATE="$FAKE_TMUX_STATE" \
-    FAKE_TMUX_CALLS="$FAKE_TMUX_CALLS" \
-    FAKE_TMUX_OPTIONS="$FAKE_TMUX_OPTIONS" \
-    FAKE_TMUX_SPLIT_ARGS="$FAKE_TMUX_SPLIT_ARGS" \
-    FAKE_TMUX_LIST_COUNT="$FAKE_TMUX_LIST_COUNT" \
-		FAMILIAR_AUTO_DISMISS_SECONDS="$FAMILIAR_AUTO_DISMISS_SECONDS" \
-		FAKE_TMUX_AUTO_DISMISS_ENABLED="$FAKE_TMUX_AUTO_DISMISS_ENABLED" \
-    "$STATUS" "$@"
-}
-
-run_message() {
-  env \
-    PATH="$FAKE_BIN:$PATH" \
-    HOME="$TEST_HOME" \
-    FAMILIAR_HOME="$FAMILIAR_HOME" \
-    TMUX=1 \
-    TMUX_PANE='%1' \
-    FAKE_TMUX_STATE="$FAKE_TMUX_STATE" \
-    FAKE_TMUX_CALLS="$FAKE_TMUX_CALLS" \
-    FAKE_TMUX_SEND_KEYS_ARGS="$FAKE_TMUX_SEND_KEYS_ARGS" \
-    FAKE_TMUX_SEND_KEYS_COUNT="$FAKE_TMUX_SEND_KEYS_COUNT" \
-    FAKE_TMUX_FAIL_SEND_KEYS="$FAKE_TMUX_FAIL_SEND_KEYS" \
-    FAKE_SLEEP_ARGS="$FAKE_SLEEP_ARGS" \
-		FAKE_TMUX_AUTO_DISMISS_ENABLED="$FAKE_TMUX_AUTO_DISMISS_ENABLED" \
-    "$MESSAGE" "$@"
-}
-
-run_dismiss() {
-  env \
-    PATH="$FAKE_BIN:$PATH" \
-    HOME="$TEST_HOME" \
-    FAMILIAR_HOME="$FAMILIAR_HOME" \
-    TMUX=1 \
-    TMUX_PANE='%1' \
-    FAKE_TMUX_STATE="$FAKE_TMUX_STATE" \
-    FAKE_TMUX_CALLS="$FAKE_TMUX_CALLS" \
-		FAKE_TMUX_AUTO_DISMISS_ENABLED="$FAKE_TMUX_AUTO_DISMISS_ENABLED" \
-    "$DISMISS" "$@"
-}
-
-run_defaults() {
-  env \
-    PATH="$FAKE_BIN:$PATH" \
-    HOME="$TEST_HOME" \
-    FAMILIAR_HOME="$FAMILIAR_HOME" \
-    "$DEFAULTS" "$@"
-}
+run_config() { run_with_fakes "$PATHS_SCRIPT" "$@"; }
+run_launcher() { run_with_fakes "$LAUNCHER" "$@"; }
+run_status() { run_with_fakes "$STATUS" "$@"; }
+run_message() { run_with_fakes FAKE_SLEEP_ARGS="$FAKE_SLEEP_ARGS" "$MESSAGE" "$@"; }
+run_dismiss() { run_with_fakes "$DISMISS" "$@"; }
+run_defaults() { run_with_fakes "$DEFAULTS" "$@"; }
 
 assert_default_pair_contract() {
-	local -r harness=$1
-	local -r intent=$2
+  local -r harness=$1
+  local -r intent=$2
 
-	assert_equals "$(run_defaults --harness "$harness" --intent "$intent")" \
-		$'model=default\neffort=default\nconfiguration=missing\nmissing_intents=planning,implementation,review\nconfiguration_path='"$DEFAULT_STORAGE/config/intent.conf"
+  assert_equals "$(run_defaults --harness "$harness" --intent "$intent")" \
+    $'model=default\neffort=default\nconfiguration=missing\nmissing_intents=planning,implementation,review\nconfiguration_path='"$DEFAULT_HOME/config/intent.conf"
 }
 
 request_path_for() {
@@ -284,13 +219,13 @@ request_path_for() {
 }
 
 response_path_for() {
-  run_config --response-path --name "$1"
+  printf '%s/summonings/%s-rs-%s.md\n' "${FAMILIAR_HOME:-$DEFAULT_HOME}" "$TIMESTAMP" "$1"
 }
 
 create_request() {
   local -r familiar_name=$1
-  local -r storage_directory=$2
-  local -r request_file="$storage_directory/antechamber/$familiar_name.md"
+  local -r home_directory=$2
+  local -r request_file="$home_directory/antechamber/$familiar_name.md"
 
   printf 'Test request for %s.\n' "$familiar_name" > "$request_file"
   printf '%s\n' "$request_file"
@@ -307,7 +242,6 @@ reset_fake_tmux() {
   : > "$FAKE_SLEEP_ARGS"
   printf '0\n' > "$FAKE_TMUX_SEND_KEYS_COUNT"
 }
-
 
 write_pane() {
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$@" >> "$FAKE_TMUX_STATE"

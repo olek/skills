@@ -1,39 +1,23 @@
 #!/usr/bin/env bash
-# Report the Familiar managed by the current summoning agent instance.
-#
-# The launcher stores the name, launch timestamp, harness, canonical Familiar
-# home, and summoner on the Familiar. This script derives the
-# request and response paths and reports delivery or termination state.
-#
-# Run this from the summoning agent's terminal. The backend supplies its stable
-# identity, so moving between terminal views does not redirect the query. By
-# default it reports immediately. Use --wait [--timeout <seconds>]
-# to wait quietly for a response; the default timeout is ten minutes.  Add
-# --auto-dismiss to keep waiting in the same invocation after delivery for a
-# configurable inspection interval (60 seconds by default), closing the Familiar
-# pane if it remains open. FAMILIAR_AUTO_DISMISS_SECONDS controls the interval.
-# The launcher permits one managed Familiar per summoning agent instance.
+# Report delivery and optionally wait for the current Familiar.
 set -euo pipefail
 
 SCRIPT_DIRECTORY=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 readonly SCRIPT_DIRECTORY
 readonly DEFAULT_WAIT_TIMEOUT_SECONDS=600
 readonly POLL_INTERVAL_SECONDS=5
-readonly DEFAULT_AUTO_DISMISS_SECONDS=60
+readonly MAX_AUTO_DISMISS_SECONDS=60
+readonly DEFAULT_AUTO_DISMISS_SECONDS=$MAX_AUTO_DISMISS_SECONDS
 readonly AUTO_DISMISS_POLL_INTERVAL_SECONDS=1
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIRECTORY/paths.sh"
 # shellcheck disable=SC1091
-source "$SCRIPT_DIRECTORY/lib/harness.sh"
-# shellcheck disable=SC1091
 source "$SCRIPT_DIRECTORY/lib/backend.sh"
-# shellcheck disable=SC1091
-source "$SCRIPT_DIRECTORY/lib/familiar.sh"
 
 usage() {
-  printf 'Usage: %s [--wait] [--timeout <seconds>] [--auto-dismiss]\n' "${0##*/}" >&2
-  printf '       FAMILIAR_AUTO_DISMISS_SECONDS sets the default auto-dismiss interval; default: 60\n' >&2
+  printf 'Usage: %s [--wait [--timeout <seconds>] [--auto-dismiss]]\n' "${0##*/}" >&2
+  printf '       FAMILIAR_AUTO_DISMISS_SECONDS sets the auto-dismiss interval; default and maximum: %s\n' "$MAX_AUTO_DISMISS_SECONDS" >&2
 }
 
 fail() {
@@ -43,48 +27,51 @@ fail() {
 
 normalize_auto_dismiss_seconds() {
   local -r value=$1
-  local -r source_name=$2
 
-  [[ $value =~ ^[0-9]+$ ]] || fail "$source_name must be a non-negative integer number of seconds"
-  (( 10#$value <= 60 )) || fail "$source_name must be no more than 60 seconds"
+  [[ $value =~ ^[0-9]+$ ]] || fail "FAMILIAR_AUTO_DISMISS_SECONDS must be a non-negative integer number of seconds"
+  (( 10#$value <= MAX_AUTO_DISMISS_SECONDS )) || fail "FAMILIAR_AUTO_DISMISS_SECONDS must be no more than $MAX_AUTO_DISMISS_SECONDS seconds"
   printf '%d\n' "$((10#$value))"
 }
 
-response_status() {
-  local -r response_file=$1
-
-  if [[ -f $response_file ]]; then
-    printf 'response delivered'
-  elif [[ -e $response_file ]]; then
-    printf 'response path invalid'
+familiar_row_state() {
+  local -r timestamp=$1 name=$2 home=$3 closed=$4
+  local paths request response
+  paths=$(familiar_summoning_paths "$home" "$timestamp" "$name") || {
+    printf invalid-metadata
+    return
+  }
+  IFS=$'\t' read -r _ request response <<< "$paths"
+  if [[ -f $response ]]; then
+    printf delivered
+  elif [[ $closed == 1 ]]; then
+    printf ended
+  elif [[ -e $response ]]; then
+    printf invalid
   else
-    printf 'awaiting response'
+    printf awaiting
   fi
 }
 
 parse_arguments() {
   local -n should_wait_ref=$1
-  local -n wait_option_seen_ref=$2
-  local -n timeout_seconds_ref=$3
-  local -n auto_dismiss_enabled_ref=$4
-  shift 4
+  local -n timeout_seconds_ref=$2
+  local -n auto_dismiss_enabled_ref=$3
+  shift 3
+  local timeout_seen=0
 
   while (($#)); do
     case "$1" in
       --wait)
         # shellcheck disable=SC2034 # This nameref returns the value to main.
         should_wait_ref=1
-        # shellcheck disable=SC2034 # This nameref returns the value to main.
-        wait_option_seen_ref=1
         shift
         ;;
       --timeout)
         (($# >= 2)) || fail 'Missing value for --timeout'
         [[ $2 =~ ^[0-9]+$ ]] || fail '--timeout must be a non-negative integer number of seconds'
-        # shellcheck disable=SC2034 # These namerefs return the values to main.
-        should_wait_ref=1
         # shellcheck disable=SC2034 # This nameref returns the value to main.
         timeout_seconds_ref=$((10#$2))
+        timeout_seen=1
         shift 2
         ;;
       --auto-dismiss)
@@ -107,20 +94,17 @@ parse_arguments() {
     esac
   done
 
-  (( ! auto_dismiss_enabled_ref || wait_option_seen_ref )) || fail '--auto-dismiss requires --wait; use --wait --auto-dismiss.'
+  (( should_wait_ref )) || {
+    (( ! timeout_seen )) || fail '--timeout requires --wait; use --wait --timeout <seconds>.'
+    (( ! auto_dismiss_enabled_ref )) || fail '--auto-dismiss requires --wait; use --wait --auto-dismiss.'
+  }
 }
 
 derive_paths() {
-  local -r familiar_timestamp=$1
-  local -r familiar_name=$2
-  local -r storage_directory=$3
-
-  familiar_validate_name "$familiar_name" || return 1
-  familiar_validate_timestamp "$familiar_timestamp" || return 1
-  familiar_validate_storage_directory "$storage_directory" || return 1
-  printf '%s\t%s\n' \
-    "$(familiar_path_in_directory "${storage_directory%/}/summonings" "$(familiar_request_filename "$familiar_timestamp" "$familiar_name")")" \
-    "$(familiar_path_in_directory "${storage_directory%/}/summonings" "$(familiar_response_filename "$familiar_timestamp" "$familiar_name")")"
+  local paths request response
+  paths=$(familiar_summoning_paths "$3" "$1" "$2") || return 1
+  IFS=$'\t' read -r _ request response <<< "$paths"
+  printf '%s\t%s\n' "$request" "$response"
 }
 
 report_invalid_metadata() {
@@ -129,7 +113,7 @@ report_invalid_metadata() {
   local -r familiar_id=$3
 
   printf 'Managed Familiar: %s (%s, %s %s, invalid metadata)\n' \
-    "$familiar_name" "$familiar_harness" "$(familiar_display_noun)" "$familiar_id"
+    "$familiar_name" "$familiar_harness" "$(familiar_backend_display_noun)" "$familiar_id"
   printf '  request: unavailable\n  response: unavailable\n'
 }
 
@@ -139,7 +123,7 @@ report_familiars() {
   local familiar_name
   local familiar_timestamp
   local familiar_harness
-  local storage_directory
+  local home
   local familiar_closed
   local request_file
   local response_file
@@ -147,25 +131,28 @@ report_familiars() {
   local has_managed_familiar=0
   local familiars
 
-  familiars=$(familiar_managed_familiars "$summoner_id") || return 1
+  familiars=$(familiar_backend_list_familiars "$summoner_id") || return 1
 
-  while IFS=$'\t' read -r familiar_id familiar_name familiar_timestamp familiar_harness storage_directory familiar_closed; do
+  while IFS=$'\t' read -r familiar_id familiar_name familiar_timestamp familiar_harness home familiar_closed; do
     [[ $familiar_id ]] || continue
     has_managed_familiar=1
 
-    if ! derived_paths=$(derive_paths "$familiar_timestamp" "$familiar_name" "$storage_directory"); then
+    local row_state label
+    row_state=$(familiar_row_state "$familiar_timestamp" "$familiar_name" "$home" "$familiar_closed")
+    if [[ $row_state == invalid-metadata ]]; then
       report_invalid_metadata "$familiar_name" "$familiar_harness" "$familiar_id"
       continue
     fi
+    derived_paths=$(derive_paths "$familiar_timestamp" "$familiar_name" "$home")
     IFS=$'\t' read -r request_file response_file <<< "$derived_paths"
-
-    if [[ $familiar_closed == 1 && ! -f $response_file ]]; then
-      printf 'Managed Familiar: %s (%s, %s %s, ended without response)\n' \
-        "$familiar_name" "$familiar_harness" "$(familiar_display_noun)" "$familiar_id"
-    else
-      printf 'Managed Familiar: %s (%s, %s %s, %s)\n' \
-        "$familiar_name" "$familiar_harness" "$(familiar_display_noun)" "$familiar_id" "$(response_status "$response_file")"
-    fi
+    case "$row_state" in
+      delivered) label='response delivered' ;;
+      ended) label='ended without response' ;;
+      invalid) label='response path invalid' ;;
+      awaiting) label='awaiting response' ;;
+    esac
+    printf 'Managed Familiar: %s (%s, %s %s, %s)\n' \
+      "$familiar_name" "$familiar_harness" "$(familiar_backend_display_noun)" "$familiar_id" "$label"
     printf '  request: %s\n  response: %s\n' "$request_file" "$response_file"
   done <<< "$familiars"
 
@@ -180,35 +167,25 @@ completion_state() {
   local familiar_name
   local familiar_timestamp
   local familiar_harness
-  local storage_directory
+  local home
   local familiar_closed
-  local derived_paths
-  local response_file
   local has_managed_familiar=0
   local has_pending_response=0
   local has_failure=0
   local familiars
 
-  familiars=$(familiar_managed_familiars "$summoner_id") || return 1
+  familiars=$(familiar_backend_list_familiars "$summoner_id") || return 1
 
-  while IFS=$'\t' read -r familiar_id familiar_name familiar_timestamp familiar_harness storage_directory familiar_closed; do
+  while IFS=$'\t' read -r familiar_id familiar_name familiar_timestamp familiar_harness home familiar_closed; do
     [[ $familiar_id ]] || continue
     has_managed_familiar=1
 
-    if ! derived_paths=$(derive_paths "$familiar_timestamp" "$familiar_name" "$storage_directory"); then
-      has_failure=1
-      continue
-    fi
-    IFS=$'\t' read -r _ response_file <<< "$derived_paths"
-
-    if [[ -f $response_file ]]; then
-      continue
-    fi
-    if [[ -e $response_file || $familiar_closed == 1 ]]; then
-      has_failure=1
-    else
-      has_pending_response=1
-    fi
+    local row_state
+    row_state=$(familiar_row_state "$familiar_timestamp" "$familiar_name" "$home" "$familiar_closed")
+    case "$row_state" in
+      ended|invalid|invalid-metadata) has_failure=1 ;;
+      awaiting) has_pending_response=1 ;;
+    esac
   done <<< "$familiars"
 
   if (( ! has_managed_familiar )); then
@@ -225,7 +202,7 @@ completion_state() {
 open_familiar_id() {
   local -r summoner_id=$1
 
-  familiar_managed_familiars "$summoner_id" \
+  familiar_backend_list_familiars "$summoner_id" \
     | awk -F '\t' '$6 != "1" { print $1; exit }'
 }
 
@@ -240,16 +217,16 @@ wait_for_auto_dismiss() {
   while true; do
     familiar_id=$(open_familiar_id "$summoner_id")
     if [[ -z $familiar_id ]]; then
-      printf 'Auto-dismiss ended: the Familiar %s is closed.\n' "$(familiar_display_noun)"
+      printf 'Auto-dismiss ended: the Familiar %s is closed.\n' "$(familiar_backend_display_noun)"
       return 0
     fi
 
     remaining_seconds=$((inspection_seconds - (SECONDS - started_at_seconds)))
     if (( remaining_seconds <= 0 )); then
-      if familiar_close_familiar "$familiar_id"; then
-        printf 'Auto-dismissed Familiar %s %s after %s seconds of user inspection.\n' "$(familiar_display_noun)" "$familiar_id" "$inspection_seconds"
+      if familiar_backend_close_familiar "$familiar_id"; then
+        printf 'Auto-dismissed Familiar %s %s after %s seconds of user inspection.\n' "$(familiar_backend_display_noun)" "$familiar_id" "$inspection_seconds"
       else
-        printf 'Auto-dismiss ended: the Familiar %s was already closed.\n' "$(familiar_display_noun)"
+        printf 'Auto-dismiss ended: the Familiar %s was already closed.\n' "$(familiar_backend_display_noun)"
       fi
       return 0
     fi
@@ -307,20 +284,17 @@ wait_for_completion() {
 
 main() {
   local should_wait=0
-  # shellcheck disable=SC2034 # Passed by nameref to parse_arguments.
-  local wait_option_seen=0
   local timeout_seconds=$DEFAULT_WAIT_TIMEOUT_SECONDS
   local auto_dismiss_enabled=0
   local auto_dismiss_seconds=${FAMILIAR_AUTO_DISMISS_SECONDS:-$DEFAULT_AUTO_DISMISS_SECONDS}
 
-  parse_arguments should_wait wait_option_seen timeout_seconds auto_dismiss_enabled "$@"
+  parse_arguments should_wait timeout_seconds auto_dismiss_enabled "$@"
   if (( auto_dismiss_enabled )); then
-    auto_dismiss_seconds=$(normalize_auto_dismiss_seconds "$auto_dismiss_seconds" 'FAMILIAR_AUTO_DISMISS_SECONDS')
+    auto_dismiss_seconds=$(normalize_auto_dismiss_seconds "$auto_dismiss_seconds")
   fi
   readonly should_wait timeout_seconds auto_dismiss_enabled auto_dismiss_seconds
   local summoner_id
-  familiar_backend_require_context || exit 1
-  summoner_id=$(familiar_backend_summoner_id)
+  summoner_id=$(familiar_current_summoner_id) || exit 1
   readonly summoner_id
   if (( should_wait )); then
     wait_for_completion "$summoner_id" "$timeout_seconds" "$auto_dismiss_enabled" "$auto_dismiss_seconds"
