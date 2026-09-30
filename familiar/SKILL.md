@@ -76,10 +76,14 @@ Dismiss the current Familiar with `<skill-dir>/scripts/dismiss.sh`.
 
 ## Terminal backend
 
-tmux is established. iTerm2 is experimental, untested on a Mac, and likely not
-working yet. Selection uses tmux whenever `TMUX` is set; otherwise it uses a
-direct iTerm2 session or fails. For Codex sandbox access to tmux, see
-[the scoped rule example](examples/codex/familiar.rules).
+tmux is established. iTerm2 is experimental and has not been validated on a
+Mac. Selection uses tmux whenever `TMUX` is set; otherwise auto mode uses a
+direct iTerm2 session only when `ITERM_SESSION_ID` and `TERM_PROGRAM=iTerm.app`
+are both present. Explicit `FAMILIAR_BACKEND=iterm2` permits other callers that
+provide a valid session ID. For Codex sandbox access to tmux or iTerm2, see [the
+scoped rule example](examples/codex/familiar.rules). The rules allow these
+scripts to run but may not grant iTerm2 socket or macOS Automation access; if
+the sandbox blocks either, use `danger-full-access` or approve each call.
 
 > **Voice.** Say "Summoning the Familiar...", "at work on...", "has delivered",
 > and "Dismissing the Familiar". The idiom borrows from Diana Wynne Jones.

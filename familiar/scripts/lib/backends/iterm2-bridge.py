@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """One-shot, exact-session iTerm2 transport for Familiar."""
 import asyncio
+import contextlib
 import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 
 VARIABLE = "user.familiar_managed"
+EXIT_VARIABLE = "user.familiar_exit"
 
 
 class BridgeError(Exception):
@@ -56,14 +59,17 @@ async def close_and_clear(familiar, marker_path):
     clear_recovery(marker_path)
 
 
-def op_list(app, record, marker, marker_path):
+async def op_list(app, record, marker, marker_path, output):
     record = marker or record
     if not record:
         return
     if not record.get("familiar"):
         raise BridgeError("iTerm2 launch needs recovery before the Familiar session ID was recorded: " + str(marker_path))
     familiar = app.get_session_by_id(record["familiar"])
-    print("\t".join((record["familiar"], record["name"], record["timestamp"], record["harness"], record["home"], "0" if familiar else "1")))
+    dead = familiar is None
+    if familiar is not None:
+        dead = await familiar.async_get_variable(EXIT_VARIABLE) is not None
+    print("\t".join((record["familiar"], record["name"], record["timestamp"], record["harness"], record["home"], "1" if dead else "0")), file=output)
 
 
 def op_can_launch(app, record, marker, marker_path):
@@ -71,14 +77,15 @@ def op_can_launch(app, record, marker, marker_path):
                       "This summoning agent instance already has a managed Familiar; close it before summoning another")
 
 
-async def op_launch(iterm2, app, summoner, summoner_id, record, marker, marker_path, rest):
+async def op_launch(iterm2, app, summoner, summoner_id, record, marker, marker_path, rest, output):
     ensure_can_launch(app, record, marker, marker_path,
                       "A managed Familiar is still live or needs recovery")
-    cwd, name, timestamp, harness, home = rest
-    command = sys.stdin.read()
+    cwd, name, timestamp, harness, home, launcher = rest
+    if not os.path.isabs(launcher) or not re.fullmatch(r"[A-Za-z0-9/._-]+", launcher):
+        raise BridgeError("iTerm2 launch script path contains unsupported characters")
     new_record = dict(summoner=summoner_id, familiar="", name=name, timestamp=timestamp, harness=harness, home=home)
     profile = iterm2.LocalWriteOnlyProfile()
-    profile.set_command(command)
+    profile.set_command("/bin/sh " + launcher)
     profile.set_use_custom_command("Yes")
     profile.set_custom_directory(cwd)
     profile.set_initial_directory_mode(iterm2.InitialWorkingDirectory.INITIAL_WORKING_DIRECTORY_CUSTOM)
@@ -121,7 +128,7 @@ async def op_launch(iterm2, app, summoner, summoner_id, record, marker, marker_p
     except Exception as error:
         print("Recovery required for iTerm2 Familiar session %s; could not clear the recovery journal: %s." % (familiar.session_id, error), file=sys.stderr)
         return 3
-    print(familiar.session_id)
+    print(familiar.session_id, file=output)
 
 
 async def op_owned(app, summoner, record, marker, marker_path, operation, rest):
@@ -143,18 +150,26 @@ async def op_owned(app, summoner, record, marker, marker_path, operation, rest):
             clear_recovery(marker_path)
 
 
-async def operate(iterm2, args):
+async def operate(iterm2, args, output):
     operation, summoner_id, *rest = args
+    os.environ.pop("ITERM2_COOKIE", None)
+    os.environ.pop("ITERM2_KEY", None)
+    try:
+        iterm2.auth.authenticate()
+    except iterm2.auth.AuthenticationException as error:
+        raise BridgeError("iTerm2 authentication failed: %s; enable Settings > General > Magic > Enable Python API and allow Automation for this terminal or harness" % error)
+    except PermissionError:
+        raise
+    except Exception as error:
+        raise BridgeError("iTerm2 authentication failed (%s: %s); enable Settings > General > Magic > Enable Python API and allow Automation for this terminal or harness" % (type(error).__name__, error))
     connection = await iterm2.Connection.async_create()
-    app = await iterm2.async_get_app(connection, create_if_needed=False)
+    app = await iterm2.async_get_app(connection)
     if app is None:
         raise BridgeError("No local iTerm2 GUI connection is available")
     summoner = app.get_session_by_id(summoner_id)
     if summoner is None or summoner.session_id != summoner_id:
         raise BridgeError("Invoking iTerm2 session ID does not resolve exactly: " + summoner_id)
     record = await summoner.async_get_variable(VARIABLE)
-    if isinstance(record, str):
-        record = json.loads(record)
     if record and record.get("summoner") != summoner_id:
         raise BridgeError("Managed record belongs to another summoner")
     marker_path = recovery_path(summoner_id)
@@ -163,9 +178,9 @@ async def operate(iterm2, args):
         raise BridgeError("Recovery record belongs to another summoner")
     operations = {
         "check": lambda: None,
-        "list": lambda: op_list(app, record, marker, marker_path),
+        "list": lambda: op_list(app, record, marker, marker_path, output),
         "can-launch": lambda: op_can_launch(app, record, marker, marker_path),
-        "launch": lambda: op_launch(iterm2, app, summoner, summoner_id, record, marker, marker_path, rest),
+        "launch": lambda: op_launch(iterm2, app, summoner, summoner_id, record, marker, marker_path, rest, output),
         "send": lambda: op_owned(app, summoner, record, marker, marker_path, operation, rest),
         "submit": lambda: op_owned(app, summoner, record, marker, marker_path, operation, rest),
         "close": lambda: op_owned(app, summoner, record, marker, marker_path, operation, rest),
@@ -185,15 +200,22 @@ def main():
         print("iTerm2 Python package unavailable: " + str(error) + ".", file=sys.stderr)
         return 1
     try:
-        result = asyncio.run(operate(iterm2, sys.argv[1:]))
+        output = sys.stdout
+        with contextlib.redirect_stdout(sys.stderr):
+            result = asyncio.run(operate(iterm2, sys.argv[1:], output))
         return result or 0
     except Exception as error:
         message = str(error)
         if "401" in message:
             message = "iTerm2 Python API permission denied (401); enable API access and allow Automation"
+        elif isinstance(error, PermissionError):
+            message = "iTerm2 Python API access was denied by the local sandbox; allow the iTerm2 socket and Apple Events or approve this call: " + message
         elif "refused" in message.lower() or "connect" in message.lower():
             message = "iTerm2 Python API connection failed; enable the API and check the local GUI: " + message
         print(message.rstrip(".") + ".", file=sys.stderr)
+        return 1
+    except SystemExit:
+        print("iTerm2 Python package is too old for this iTerm2 version; upgrade the package.", file=sys.stderr)
         return 1
 
 

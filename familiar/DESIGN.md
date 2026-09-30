@@ -2,7 +2,7 @@
 
 A Familiar is one visible, interactive agent beside the summoner terminal. Its
 terminal lets the user watch, guide, and dismiss it. tmux is established; iTerm2
-is experimental, untested on a Mac, and likely not working yet.
+is experimental and has not been validated on a Mac.
 
 ## Inspiration
 

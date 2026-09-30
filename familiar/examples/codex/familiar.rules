@@ -2,7 +2,9 @@
 # the absolute path to the Codex configuration directory, then restart Codex.
 # Match the installed skill path under <codex-home>/skills, not the source
 # checkout path. Rule patterns do not expand environment variables or
-# placeholders.
+# placeholders. These rules allow the Familiar scripts to run; they do not
+# grant iTerm2 socket or macOS Automation access. If Codex's sandbox blocks
+# either, use danger-full-access or approve each call.
 prefix_rule(
     pattern=["<codex-home>/skills/familiar/scripts/summon.sh"],
     decision="allow",

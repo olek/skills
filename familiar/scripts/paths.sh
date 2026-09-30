@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Shared Familiar home, validation, and path derivation.
 
+if [[ ${BASH_VERSINFO[0]} -lt 4 || ( ${BASH_VERSINFO[0]} -eq 4 && ${BASH_VERSINFO[1]} -lt 3 ) ]]; then
+  printf 'Familiar requires Bash 4.3 or newer (found %s); install bash and put it first on PATH.\n' "$BASH_VERSION" >&2
+  exit 1
+fi
+
 familiar_home() {
   local home=${FAMILIAR_HOME:-}
   if [[ -z $home ]]; then

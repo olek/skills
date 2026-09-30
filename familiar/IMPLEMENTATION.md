@@ -1,7 +1,7 @@
 # Familiar implementation
 
-tmux is established; iTerm2 is experimental, untested on a Mac, and likely not
-working yet.
+tmux is established; iTerm2 is experimental and has not been validated on a
+Mac.
 
 ## Components
 
@@ -74,6 +74,24 @@ metadata is set:
 The iTerm2 record stores `summoner`, `familiar`, `name`, `timestamp`, `harness`,
 and `home` on the summoner session. The recovery journal uses the same record
 shape. Dismissal clears the managed record and any journal.
+
+The iTerm2 backend selects an interpreter that imports `iterm2`, preferring
+`python3` and then the newest installed iTerm2 runtime unless
+`FAMILIAR_ITERM2_PYTHON` is set. It passes a one-shot `/tmp` launcher to the
+profile as `/bin/sh <path>`. The launcher exports the summoner's `PATH`, runs
+the harness command in a child shell, and waits for Enter after a nonzero exit
+so command failures remain visible. The launcher path contains only characters
+that survive iTerm2's profile command processing. The split uses the default
+iTerm2 profile with command and directory overrides, so its colors and font may
+differ from the summoner's. The bridge verifies that iTerm2 retained the
+session metadata after writing it.
+
+Auto backend selection prefers tmux. It selects iTerm2 only when both
+`ITERM_SESSION_ID` and `TERM_PROGRAM=iTerm.app` are present. Explicit
+`FAMILIAR_BACKEND=iterm2` selection permits other callers that provide a valid
+iTerm2 session ID. The shared path and backend entry files check Bash 4.3
+before entry scripts can use namerefs. The iTerm2 backend accepts GNU
+`realpath` and `mv` or their Homebrew `grealpath` and `gmv` names.
 
 Claude receives the session name `YYMMDD-HHMM-fm-<name>` and an alternate-screen
 override scoped to its process. Codex, OpenCode, and Antigravity do not use the

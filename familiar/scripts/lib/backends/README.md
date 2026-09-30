@@ -27,3 +27,11 @@ A launch failure normally returns nonzero after cleaning up the terminal.
 Exit status 3 means cleanup failed: the launcher preserves the promoted request
 for recovery. The iTerm2 backend owns a journal in `recovery/` and blocks new
 launches while recovery is required.
+
+The iTerm2 backend writes a one-shot launcher under `/tmp` and sets the profile
+command to `/bin/sh <launcher-path>`. The path is restricted to simple ASCII
+characters so iTerm2's profile interpolation and command splitter see only the
+shell path and launcher path. The launcher exports the summoner's `PATH`, runs
+the requested harness command, removes itself, and waits for Enter after a
+nonzero exit. The backend resolves GNU `realpath` and `mv`, including the
+Homebrew names `grealpath` and `gmv`, for the shared request promotion flow.

@@ -118,11 +118,11 @@ resolve_paths() {
   [[ -d $cwd_input && -r $cwd_input ]] || fail "Working directory is not readable: $cwd_input"
 
   # shellcheck disable=SC2034 # Nameref returns the value to main.
-  home_ref=$(realpath -e -- "$home_input")
+  home_ref=$(familiar_backend_realpath -e -- "$home_input")
   # shellcheck disable=SC2034 # Nameref returns the value to main.
-  staged_ref=$(realpath -e -- "$staged")
+  staged_ref=$(familiar_backend_realpath -e -- "$staged")
   # shellcheck disable=SC2034 # Nameref returns the value to main.
-  cwd_ref=$(realpath -e -- "$cwd_input")
+  cwd_ref=$(familiar_backend_realpath -e -- "$cwd_input")
   # shellcheck disable=SC2034 # Nameref returns the value to main.
   request_ref="$home_ref/summonings/${request##*/}"
   # shellcheck disable=SC2034 # Nameref returns the value to main.
@@ -180,7 +180,7 @@ main() {
 
   # Promotion is the durable handoff boundary. Restore the staged request if
   # Familiar creation or metadata setup fails so the caller can safely retry.
-  mv --no-clobber -- "$staged_request_file" "$request_file" || fail "Could not promote staged request: $staged_request_file"
+  familiar_backend_mv --no-clobber -- "$staged_request_file" "$request_file" || fail "Could not promote staged request: $staged_request_file"
   [[ ! -e $staged_request_file ]] || fail "Request path already exists; staged request was preserved: $request_file"
   local familiar_id
   if familiar_id=$(familiar_backend_launch_familiar "$summoner_id" "$working_directory" "$familiar_command" "$familiar_name_input" "$familiar_timestamp" "$harness" "$home"); then
@@ -190,7 +190,7 @@ main() {
     if (( launch_status == 3 )); then
       fail "Familiar terminal cleanup failed; preserve the promoted request and reconcile the terminal before retrying: $request_file"
     fi
-    if [[ ! -e $staged_request_file ]] && mv --no-clobber -- "$request_file" "$staged_request_file"; then
+    if [[ ! -e $staged_request_file ]] && familiar_backend_mv --no-clobber -- "$request_file" "$staged_request_file"; then
       fail "Could not launch the Familiar; restored the staged request: $staged_request_file"
     fi
     fail "Could not launch the Familiar; recover the request from: $request_file"
