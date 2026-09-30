@@ -9,29 +9,22 @@ Each harness implements the same generic function contract:
 
 ```text
 familiar_harness_executable
-familiar_harness_models
-familiar_harness_efforts
-familiar_harness_intent_pair <planning|implementation|review>
-familiar_harness_build_command <cwd> <session_name> <prompt> <model> <effort> <status_line_config>
+familiar_harness_build_command \
+  <cwd> <session_name> <prompt> <model> <effort> <status_line_config>
 ```
 
-The executable, models, and efforts are printed to standard output. Models and
-efforts are one entry per line. `intent_pair` returns the built-in model and
-effort on one line, separated by one space, for the defaults CLI to name when a
-user-owned intent override does not apply. `build_command`
-prints the complete pane command and owns all harness-specific flags and
-environment prefixes.
+The executable is printed to standard output. `build_command` prints the
+complete pane command and owns all harness-specific flags and environment
+prefixes. Intent choices live in the user-owned configuration file; without a
+matching entry, the launcher omits model and effort overrides.
 
 Either field in an intent pair may be `default`, meaning the caller omits that
 launcher option and lets the harness CLI use its configured default. This
-sentinel belongs only to intent pairs and must not appear in model or effort
-catalogs or be passed as an explicit launcher value.
+sentinel must not be passed as an explicit launcher value.
 
 The caller always selects a harness explicitly. There is no registry default,
 and the summon launcher requires `--harness`, rejecting a missing or unknown
 value.
 
-Model and effort catalogs are informational and harness-owned. A definition may
-print a stable embedded list or delegate to its harness CLI when availability is
-configuration-dependent. The launcher remains an opaque `--model` pass-through
-and does not translate model names between vendors.
+The launcher remains an opaque `--model` pass-through and does not translate
+model names between vendors.

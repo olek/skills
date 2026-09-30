@@ -16,7 +16,7 @@ test_familiar_paths() {
   assert_equals "$(run_config --directory)" "$DEFAULT_STORAGE"
   assert_equals "$(run_config --antechamber-directory)" "$DEFAULT_ANTECHAMBER"
   assert_equals "$(run_config --summonings-directory)" "$DEFAULT_SUMMONINGS"
-  assert_equals "$(run_config --intent-overrides-path)" "$DEFAULT_STORAGE/config/intent-overrides.conf"
+  assert_equals "$(run_config --intent-config-path)" "$DEFAULT_STORAGE/config/intent.conf"
   assert_equals "$(run_config --session-name --name "$default_name")" "$TIMESTAMP-fm-$default_name"
   assert_equals "$default_request" "$(run_config --request-path --name "$default_name")"
   assert_equals "$default_response" "$DEFAULT_SUMMONINGS/$TIMESTAMP-rs-$default_name.md"
@@ -41,7 +41,7 @@ test_familiar_paths() {
   assert_equals "$(run_config --directory)" "$OVERRIDE_STORAGE"
   assert_equals "$(run_config --antechamber-directory)" "$OVERRIDE_ANTECHAMBER"
   assert_equals "$(run_config --summonings-directory)" "$OVERRIDE_SUMMONINGS"
-  assert_equals "$(run_config --intent-overrides-path)" "$OVERRIDE_STORAGE/config/intent-overrides.conf"
+  assert_equals "$(run_config --intent-config-path)" "$OVERRIDE_STORAGE/config/intent.conf"
   assert_equals "$override_request" "$(run_config --request-path --name "$override_name")"
   assert_equals "$override_response" "$OVERRIDE_SUMMONINGS/$TIMESTAMP-rs-$override_name.md"
 }

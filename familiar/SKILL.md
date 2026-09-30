@@ -1,18 +1,21 @@
 ---
 name: familiar
-description: Summon a named Codex or Claude Code Familiar in a visible terminal pane when the user explicitly requests a named familiar, sidekick, companion, or sub-agent, or says "summon the Familiar".
+description: >-
+  Summon a named Codex or Claude Code Familiar in a visible terminal pane when
+  the user explicitly requests a named familiar, sidekick, companion, or
+  sub-agent, or says "summon the Familiar".
 ---
 
 # Familiar
 
-A Familiar is one named, interactive agent in its own visible terminal pane beside
-the session that summoned it: you summon it, watch it, talk to it, and dismiss it,
-one companion at a time.
+A Familiar is one named, interactive agent in its own visible terminal pane
+beside the session that summoned it: you summon it, watch it, talk to it, and
+dismiss it, one companion at a time.
 
 Use this skill when the user asks to create, summon, launch, assign, follow up
 with, or check a named Familiar, sidekick, companion, or sub-agent, or says
-"summon the Familiar". Headless sub-agents still cover internal parallel work the
-user did not request as a named agent.
+"summon the Familiar". Headless sub-agents still cover internal parallel work
+the user did not request as a named agent.
 
 > **Voice.** Say "Summoning the Familiar...", "at work on...", "has delivered",
 > "Dismissing the Familiar", not creating/starting/killing an agent. The idiom
@@ -20,8 +23,8 @@ user did not request as a named agent.
 
 ## Write the request
 
-A Familiar works from a self-contained request needing no conversation history or
-follow-up. Cover:
+A Familiar works from a self-contained request needing no conversation history
+or follow-up. Cover:
 
 - **Objective**: one clear goal on the first line.
 - **Scope**: what is in and, where ambiguous, what is out.
@@ -39,12 +42,14 @@ The public identifier is a bare lowercase kebab-case name, e.g.
 do not create any directory yourself:
 
 ```bash
-request_path=$(<skill-dir>/scripts/paths.sh --request-path --name <bare-familiar-name>)
+request_path=$(<skill-dir>/scripts/paths.sh \
+  --request-path --name <bare-familiar-name>)
 ```
 
 If that path already exists, stop and report it as a staging collision; do not
-overwrite, rename, or reuse it. Otherwise write the request there. Do not put the
-response path or completion contract in the request; the launcher injects those.
+overwrite, rename, or reuse it. Otherwise write the request there. Do not put
+the response path or completion contract in the request; the launcher injects
+those.
 
 End the request with the target harness, effective model, and effective effort,
 each marked specified or inferred. For an omitted override, write `Harness
@@ -78,31 +83,39 @@ For Codex sessions whose workspace sandbox cannot access the tmux socket, see
   [--effort target-harness-effort]
 ```
 
-Report the printed terminal target ID and paths. Keep the Familiar interactive and visible.
+Report the printed terminal target ID and paths. Keep the Familiar interactive
+and visible.
 The Familiar writes its complete result to the response path and announces
 completion in its terminal pane when done.
 
 ## Harness and model policy
 
-`--model` is opaque, passed unchanged to the harness CLI. A user-specified model
-always wins, and model names are never translated between vendors. Given a model
-without an effort, do not invent one the model may not support.
+`--model` is opaque, passed unchanged to the harness CLI. User-specified model
+and effort values always win, and model names are never translated between
+vendors. If the user specifies either value, pass only the values they named;
+leave the other setting to the harness.
 
-Query the selected harness catalogs:
+When the user names neither value, pick the intent (planning, implementation,
+or review) and query the user's Familiar intent configuration:
 
 ```bash
-<skill-dir>/scripts/models.sh --harness <harness>
-<skill-dir>/scripts/efforts.sh --harness <harness>
-<skill-dir>/scripts/defaults.sh --harness <harness> --intent <planning|implementation|review>
+<skill-dir>/scripts/defaults.sh --harness <harness> \
+  --intent <planning|implementation|review>
 ```
 
-When the user names no model, pick the intent (planning, implementation, or
-review), query `defaults.sh`, and use its named `model=<id>` and
-`effort=<id>` pair together. The lookup applies the user's optional Familiar
-intent overrides before the built-in recommendations. An intent pair may use
-`default` for either field.
-Omit the corresponding `--model` or `--effort` launcher option; never pass
-`default` as its value.
+Use its `model=<id>` and `effort=<id>` pair together. Without a matching
+configuration entry, both fields are `default`, so the target harness chooses
+them. Omit the corresponding `--model` or `--effort` launcher option for any
+`default` field; never pass `default` as its value. A user-specified model
+or effort bypasses the intent pair.
+
+If `missing_intents` is nonempty, summon with the resolved pair, then report
+the terminal target and paths. Offer to configure every missing intent for the
+selected harness while the Familiar works. If `configuration=missing`, offer
+to create the file at `configuration_path`; otherwise offer to add the missing
+entries there. Ask which model-effort choices the user wants for the listed
+intents before writing anything, and preserve existing entries. New choices
+apply to later summons. Make this offer once per harness per conversation.
 
 ## Interactions with active Familiar agent
 
@@ -110,14 +123,14 @@ Omit the corresponding `--model` or `--effort` launcher option; never pass
 <skill-dir>/scripts/status.sh
 ```
 
-Reports the Familiar tied to the current summoning agent - its harness, terminal target,
-request and response paths, and delivery state - so you need not pass an
-identifier.
+Reports the Familiar tied to the current summoning agent - its harness,
+terminal target, request and response paths, and delivery state - with no
+identifier needed.
 
 After summoning, if nothing follows up, do nothing. To wait for completion,
 invoke `status.sh --wait` once and wait for its result. Add
-`--auto-dismiss` when you want that wait to dismiss a remaining live pane after its
-inspection interval; omit it to leave the pane open for the user. Do not
+`--auto-dismiss` when you want that wait to dismiss a remaining live pane after
+its inspection interval; omit it to leave the pane open for the user. Do not
 repeatedly probe status.
 
 **Important - wait quietly.** After invoking `status.sh --wait`, just set

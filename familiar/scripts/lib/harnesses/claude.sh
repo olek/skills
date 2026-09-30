@@ -5,33 +5,6 @@ familiar_harness_executable() {
   printf 'claude\n'
 }
 
-familiar_harness_models() {
-  printf '%s\n' fable opus sonnet haiku
-}
-
-familiar_harness_efforts() {
-  printf '%s\n' low medium high xhigh max
-}
-
-familiar_harness_intent_pair() {
-  local -r intent=${1:-}
-
-  case "$intent" in
-    planning)
-      printf 'opus medium\n'
-      ;;
-    review)
-      printf 'opus high\n'
-      ;;
-    implementation)
-      printf 'sonnet medium\n'
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
 familiar_harness_build_command() {
   local -r working_directory=$1
   local -r session_name=$2

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify Familiar paths, catalogs, lifecycle, messaging, dismissal, and status.
+# Verify Familiar paths, configuration, lifecycle, messaging, dismissal, and status.
 set -euo pipefail
 
 SKILL_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -9,8 +9,6 @@ readonly LAUNCHER="$SKILL_ROOT/scripts/summon.sh"
 readonly MESSAGE="$SKILL_ROOT/scripts/message.sh"
 readonly DISMISS="$SKILL_ROOT/scripts/dismiss.sh"
 readonly STATUS="$SKILL_ROOT/scripts/status.sh"
-readonly MODELS="$SKILL_ROOT/scripts/models.sh"
-readonly EFFORTS="$SKILL_ROOT/scripts/efforts.sh"
 readonly DEFAULTS="$SKILL_ROOT/scripts/defaults.sh"
 readonly HARNESS_LOADER="$SKILL_ROOT/scripts/lib/harness.sh"
 readonly FAMILIAR_POLICY="$SKILL_ROOT/scripts/lib/familiar.sh"
@@ -48,21 +46,8 @@ touch -- "$FAKE_TMUX_STATE" "$FAKE_TMUX_CALLS" "$FAKE_TMUX_OPTIONS" "$FAKE_TMUX_
 touch -- "$FAKE_BIN/codex" "$FAKE_BIN/claude"
 chmod +x -- "$FAKE_BIN/codex" "$FAKE_BIN/claude"
 
-cat > "$FAKE_BIN/opencode" <<'FAKE_OPENCODE'
-#!/usr/bin/env bash
-set -euo pipefail
-
-[[ ${1:-} == models ]] && printf 'provider/opencode-test-model\n'
-FAKE_OPENCODE
-chmod +x -- "$FAKE_BIN/opencode"
-
-cat > "$FAKE_BIN/agy" <<'FAKE_ANTIGRAVITY'
-#!/usr/bin/env bash
-set -euo pipefail
-
-[[ ${1:-} == models ]] && printf 'antigravity-test-model\n'
-FAKE_ANTIGRAVITY
-chmod +x -- "$FAKE_BIN/agy"
+touch -- "$FAKE_BIN/opencode" "$FAKE_BIN/agy"
+chmod +x -- "$FAKE_BIN/opencode" "$FAKE_BIN/agy"
 
 cat > "$FAKE_BIN/date" <<'FAKE_DATE'
 #!/usr/bin/env bash
@@ -278,18 +263,6 @@ run_dismiss() {
     "$DISMISS" "$@"
 }
 
-run_models() {
-  env \
-    PATH="$FAKE_BIN:$PATH" \
-    "$MODELS" "$@"
-}
-
-run_efforts() {
-  env \
-    PATH="$FAKE_BIN:$PATH" \
-    "$EFFORTS" "$@"
-}
-
 run_defaults() {
   env \
     PATH="$FAKE_BIN:$PATH" \
@@ -300,29 +273,10 @@ run_defaults() {
 
 assert_default_pair_contract() {
 	local -r harness=$1
-		local -r intent=$2
-		local output
-		local -a lines
-		local model
-		local effort
-		local catalog
+	local -r intent=$2
 
-		output=$(run_defaults --harness "$harness" --intent "$intent")
-		mapfile -t lines <<< "$output"
-		[[ ${#lines[@]} == 2 ]] || fail_test "expected one model and one effort for $harness $intent"
-		[[ ${lines[0]} == model=?* ]] || fail_test "expected a non-empty model for $harness $intent"
-			[[ ${lines[1]} == effort=?* ]] || fail_test "expected a non-empty effort for $harness $intent"
-
-				model=${lines[0]#model=}
-	effort=${lines[1]#effort=}
-	if [[ $model != default ]]; then
-		catalog=$(run_models --harness "$harness")
-			grep -Fxq -- "$model" <<< "$catalog" || fail_test "expected model $model in the $harness model catalog"
-			fi
-			if [[ $effort != default ]]; then
-				catalog=$(run_efforts --harness "$harness")
-					grep -Fxq -- "$effort" <<< "$catalog" || fail_test "expected effort $effort in the $harness effort catalog"
-					fi
+	assert_equals "$(run_defaults --harness "$harness" --intent "$intent")" \
+		$'model=default\neffort=default\nconfiguration=missing\nmissing_intents=planning,implementation,review\nconfiguration_path='"$DEFAULT_STORAGE/config/intent.conf"
 }
 
 request_path_for() {

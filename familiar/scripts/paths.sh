@@ -50,12 +50,12 @@ familiar_configuration_directory() {
   printf '%s/config\n' "${directory%/}"
 }
 
-familiar_intent_overrides_path() {
+familiar_intent_config_path() {
   local configuration_directory
 
   configuration_directory=$(familiar_configuration_directory) || return 1
   readonly configuration_directory
-  printf '%s/intent-overrides.conf\n' "$configuration_directory"
+  printf '%s/intent.conf\n' "$configuration_directory"
 }
 
 familiar_ensure_home_layout() {
@@ -154,7 +154,7 @@ familiar_paths_usage() {
     "Usage: ${0##*/} --directory" \
     "       ${0##*/} --antechamber-directory" \
     "       ${0##*/} --summonings-directory" \
-    "       ${0##*/} --intent-overrides-path" \
+    "       ${0##*/} --intent-config-path" \
     "       ${0##*/} --session-name --name <bare-familiar-name>" \
     "       ${0##*/} --request-path --name <bare-familiar-name>" \
     "       ${0##*/} --response-path --name <bare-familiar-name>" >&2
@@ -173,7 +173,7 @@ familiar_paths_main() {
 
   while (($#)); do
     case "$1" in
-      --directory|--antechamber-directory|--summonings-directory|--intent-overrides-path|--session-name|--request-path|--response-path)
+      --directory|--antechamber-directory|--summonings-directory|--intent-config-path|--session-name|--request-path|--response-path)
         [[ -z $output_kind ]] || familiar_paths_fail 'Choose one output option.'
         output_kind=$1
         shift
@@ -206,7 +206,7 @@ familiar_paths_main() {
   readonly storage_directory
   familiar_validate_storage_directory "$storage_directory" || familiar_paths_fail 'FAMILIAR_HOME must be an absolute path.'
 
-  if [[ $output_kind == '--directory' || $output_kind == '--antechamber-directory' || $output_kind == '--summonings-directory' || $output_kind == '--intent-overrides-path' ]]; then
+  if [[ $output_kind == '--directory' || $output_kind == '--antechamber-directory' || $output_kind == '--summonings-directory' || $output_kind == '--intent-config-path' ]]; then
     [[ -z $familiar_name ]] || familiar_paths_fail '--name is not used with directory output options'
     case "$output_kind" in
       --directory)
@@ -218,8 +218,8 @@ familiar_paths_main() {
       --summonings-directory)
         familiar_summonings_directory
         ;;
-      --intent-overrides-path)
-        familiar_intent_overrides_path
+      --intent-config-path)
+        familiar_intent_config_path
         ;;
     esac
     return

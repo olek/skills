@@ -1,36 +1,8 @@
 #!/usr/bin/env bash
 # Codex Familiar harness definition.
-# Refresh the embedded catalog by hand from ~/.codex/models_cache.json.
 
 familiar_harness_executable() {
   printf 'codex\n'
-}
-
-familiar_harness_models() {
-  printf '%s\n' gpt-6-sol gpt-6-luna gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna gpt-5.5
-}
-
-familiar_harness_efforts() {
-  printf '%s\n' low medium high xhigh max ultra
-}
-
-familiar_harness_intent_pair() {
-  local -r intent=${1:-}
-
-  case "$intent" in
-    planning)
-      printf 'gpt-5.6-terra medium\n'
-      ;;
-    review)
-      printf 'gpt-5.6-sol medium\n'
-      ;;
-    implementation)
-      printf 'gpt-5.6-luna high\n'
-      ;;
-    *)
-      return 1
-      ;;
-  esac
 }
 
 familiar_harness_build_command() {

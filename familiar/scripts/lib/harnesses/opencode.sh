@@ -5,29 +5,6 @@ familiar_harness_executable() {
   printf 'opencode\n'
 }
 
-familiar_harness_models() {
-  opencode models
-}
-
-familiar_harness_efforts() {
-  printf 'OpenCode TUI does not support launch-time effort overrides.\n' >&2
-  return 1
-}
-
-familiar_harness_intent_pair() {
-  local -r intent=${1:-}
-
-  # Placeholder until harness-specific intent model-effort pairs are known.
-  case "$intent" in
-    planning|implementation|review)
-      printf 'default default\n'
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
 familiar_harness_build_command() {
   local -r working_directory=$1
   local -r session_name=$2
