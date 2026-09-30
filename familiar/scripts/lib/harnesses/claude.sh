@@ -15,6 +15,10 @@ familiar_harness_build_command() {
   local command='CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1 exec claude'
 
   : "$working_directory" "$status_line_config"
+  # A Claude summoner's DEBUG reaches only this process, not the new pane.
+  if [[ ${CLAUDECODE:-} == 1 && -n ${DEBUG:-} ]]; then
+    command="DEBUG=$(shell_quote "$DEBUG") $command"
+  fi
   printf -v command '%s --name %s' "$command" "$(shell_quote "$session_name")"
   if [[ -n $model ]]; then
     printf -v command '%s --model %s' "$command" "$(shell_quote "$model")"
