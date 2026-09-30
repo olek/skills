@@ -145,6 +145,9 @@ report_familiars() {
   local response_file
   local derived_paths
   local has_managed_familiar=0
+  local familiars
+
+  familiars=$(familiar_managed_familiars "$summoner_id") || return 1
 
   while IFS=$'\t' read -r familiar_id familiar_name familiar_timestamp familiar_harness storage_directory familiar_closed; do
     [[ $familiar_id ]] || continue
@@ -164,7 +167,7 @@ report_familiars() {
         "$familiar_name" "$familiar_harness" "$(familiar_display_noun)" "$familiar_id" "$(response_status "$response_file")"
     fi
     printf '  request: %s\n  response: %s\n' "$request_file" "$response_file"
-  done < <(familiar_managed_familiars "$summoner_id")
+  done <<< "$familiars"
 
   if (( ! has_managed_familiar )); then
     printf 'No managed Familiar exists for this summoning agent instance.\n'
@@ -184,6 +187,9 @@ completion_state() {
   local has_managed_familiar=0
   local has_pending_response=0
   local has_failure=0
+  local familiars
+
+  familiars=$(familiar_managed_familiars "$summoner_id") || return 1
 
   while IFS=$'\t' read -r familiar_id familiar_name familiar_timestamp familiar_harness storage_directory familiar_closed; do
     [[ $familiar_id ]] || continue
@@ -203,7 +209,7 @@ completion_state() {
     else
       has_pending_response=1
     fi
-  done < <(familiar_managed_familiars "$summoner_id")
+  done <<< "$familiars"
 
   if (( ! has_managed_familiar )); then
     printf 'no-familiar'

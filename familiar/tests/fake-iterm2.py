@@ -1,6 +1,7 @@
 """Persistent fake of the iTerm2 methods used by Familiar."""
 import json
 import os
+import sys
 
 PATH = os.environ["FAKE_ITERM2_STATE"]
 
@@ -41,11 +42,13 @@ class Session:
         self.session_id = session_id
 
     async def async_get_variable(self, name):
+        if load().get("fail") == "list" and sys.argv[1] == "list":
+            raise RuntimeError("list RPC failed")
         return load()["sessions"][self.session_id].get("variable")
 
     async def async_set_variable(self, name, value):
         state = load()
-        if state.get("fail") == "metadata":
+        if state.get("fail") in ("metadata", "metadata-close"):
             raise RuntimeError("metadata failed")
         state["sessions"][self.session_id]["variable"] = value
         state["events"].append(["set", self.session_id, value])
@@ -70,7 +73,7 @@ class Session:
 
     async def async_close(self, force=False):
         state = load()
-        if state.get("fail") == "close":
+        if state.get("fail") in ("close", "metadata-close"):
             raise RuntimeError("close failed")
         state["events"].append(["close", self.session_id, force])
         del state["sessions"][self.session_id]

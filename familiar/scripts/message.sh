@@ -69,11 +69,11 @@ main() {
   readonly familiar_name familiar_id
 
   if ! familiar_backend_send_literal "$familiar_id" "$message"; then
-    fail "Could not deliver the message to Familiar $familiar_name in pane $familiar_id."
+    fail "Could not deliver the message to Familiar $familiar_name in $(familiar_display_noun) $familiar_id."
   fi
   sleep "$MESSAGE_SUBMISSION_DELAY_SECONDS"
   if ! familiar_backend_submit "$familiar_id"; then
-    fail "Message text was delivered to Familiar $familiar_name in pane $familiar_id, but Enter failed; the message may remain unsubmitted."
+    fail "Message text was delivered to Familiar $familiar_name in $(familiar_display_noun) $familiar_id, but Enter failed; the message may remain unsubmitted."
   fi
   printf 'Sent message to Familiar %s in %s %s.\n' "$familiar_name" "$(familiar_display_noun)" "$familiar_id"
 }

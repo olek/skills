@@ -117,15 +117,21 @@ strict: duplicate or malformed lines make the defaults lookup fail.
 The tmux backend requires Bash, tmux, GNU core utilities, and the selected
 harness CLI (`codex`, `claude`, `opencode`, or `agy`) on `PATH`.
 
-The iTerm2 backend is experimental and has not been tested on a Mac. It requires
-a local logged-in macOS iTerm2 session, Bash 4.3 or newer, GNU coreutils `realpath` and `mv` on `PATH` (put the Homebrew
-`gnubin` directory first), and a Python 3 executable with the `iterm2` package.
+The iTerm2 backend is experimental and has not been tested on a Mac. It
+requires a local logged-in macOS iTerm2 session, Bash 4.3 or newer, GNU
+coreutils `realpath` and `mv` on `PATH` (put the Homebrew `gnubin` directory
+first), and a Python 3 executable with the `iterm2` package.
 Enable iTerm2's Python API and grant the external script Automation permission.
 Set `FAMILIAR_ITERM2_PYTHON` if that Python executable is not `python3`.
 Automatic selection uses tmux whenever `TMUX` is set, even inside iTerm2; it
 uses iTerm2 only in a direct iTerm2 session. `FAMILIAR_BACKEND` can override
 automatic selection, subject to the selected backend context check. The iTerm2
-backend cannot run from inside tmux. Its managed record lives on the invoking iTerm2 session and is not guaranteed across app
-restart. Live Mac validation is still required before relying on this backend:
+backend cannot run from inside tmux. Its managed record lives on the invoking
+iTerm2 session. During launch, a recovery journal under
+`FAMILIAR_HOME/recovery` blocks another launch if target cleanup fails. Keep
+the promoted request and use `dismiss.sh` from the same origin session to close
+the recorded target before retrying. The session record is not guaranteed
+across app restart. Live Mac validation is still required before relying on
+this backend:
 confirm `ITERM_SESSION_ID` maps to the Python session ID, split profile startup
 and working directory, close-on-end lookup, and Automation permissions.

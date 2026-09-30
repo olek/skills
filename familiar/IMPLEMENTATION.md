@@ -37,7 +37,10 @@ tested on a Mac:
 - **`scripts/lib/backends/iterm2.sh`** and **`iterm2-bridge.py`** - experimental
   one-shot Python API adapter. It resolves the inherited origin ID exactly,
   splits with startup profile settings, and stores a managed record on the
-  origin session. This path has fake API tests only; it is untested on a Mac.
+  origin session. A local recovery journal blocks a retry after failed target
+  cleanup and preserves the origin, target, and request metadata until scoped
+  dismissal succeeds. This path has fake API tests only; it is untested on a
+  Mac.
 - **`scripts/lib/harness.sh`** - source-only module that discovers
   harness definitions by scanning `scripts/lib/harnesses/*.sh` (no central list),
   loads the selected definition, and provides the shell-quoting helper.

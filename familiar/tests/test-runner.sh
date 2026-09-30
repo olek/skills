@@ -38,6 +38,10 @@ main() {
   test_iterm2_origin_and_retry
   test_iterm2_auto_selection
   test_no_terminal_backend
+  test_iterm2_list_failure
+  test_iterm2_orphan_recovery
+  test_iterm2_failure_nouns
+  test_iterm2_selection_and_preflight
   printf 'All Familiar tests passed.\n'
 }
 

@@ -15,6 +15,9 @@ familiar_resolve_live_familiar() {
   local candidate_closed
   local live_count=0
   local managed_count=0
+  local familiars
+
+  familiars=$(familiar_managed_familiars "$summoner_id") || return 1
 
   while IFS=$'\t' read -r candidate_familiar_id candidate_familiar_name _ _ _ candidate_closed; do
     [[ -n $candidate_familiar_id ]] || continue
@@ -26,7 +29,7 @@ familiar_resolve_live_familiar() {
       # shellcheck disable=SC2034 # This nameref returns the selected Familiar ID to the caller.
       familiar_id_ref=$candidate_familiar_id
     fi
-  done < <(familiar_managed_familiars "$summoner_id")
+  done <<< "$familiars"
 
   if (( ! managed_count )); then
     printf 'No managed Familiar is associated with summoner %s.\n' "$summoner_id" >&2
