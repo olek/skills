@@ -1,7 +1,7 @@
 # Familiar implementation
 
-tmux is established; iTerm2 is experimental and has not been validated on a
-Mac.
+The Tmux backend is primary and well tested. The iTerm2 backend is experimental
+and has not been validated on a Mac.
 
 ## Components
 
@@ -24,11 +24,11 @@ The [backend contract](scripts/lib/backends/README.md) and
 
 `FAMILIAR_HOME` defaults to `~/.familiar`. A request starts at
 `antechamber/<name>.md`. The launcher captures local time once and promotes it
-to `summonings/YYMMDD-HHMM-rq-<name>.md`; the response uses `rs`. The shared
-path builder derives both paths from the home, timestamp, and name. Existing
-request or response paths stop the launch. The launcher injects the resolved
-request and response paths, requires the Familiar to write its complete result
-once, and asks it to announce completion in its terminal.
+to `summonings/YYMMDD-HHMM-rq-<name>.md`; the response path uses `rs`. The
+shared path builder derives both paths from the home, timestamp, and name.
+Existing request or response paths stop the launch. The launcher injects the
+resolved request and response paths, requires the Familiar to write a complete
+result exactly once, and asks it to announce completion in its terminal.
 
 The base layout includes `antechamber/`, `config/`, and `summonings/`. The iTerm2
 bridge creates `recovery/<sha256(summoner id)>.json` before splitting a terminal.
@@ -48,18 +48,19 @@ promoted request stays in place for recovery.
 | --- | --- | --- |
 | `invalid-metadata` | Invalid metadata; paths unavailable | Failed |
 | `delivered` | Response delivered | Delivered |
-| `ended` | Ended without response | Failed |
+| `aborted` | Aborted without response | Failed |
 | `invalid` | Response path invalid | Failed |
 | `awaiting` | Awaiting response | Waiting |
 
-A closed terminal without a response is `ended`, even if the response path is a
-directory. `--wait` polls for delivery or failure. `--wait --auto-dismiss` adds
-an inspection interval of up to 60 seconds, then closes a remaining live
-Familiar terminal. `--timeout` requires `--wait`.
+A closed terminal without a response is `aborted`, even if the response path is
+a directory. The `--wait` option polls for delivery or failure. The
+`--auto-dismiss` option adds an inspection interval of up to 60 seconds, then
+closes a remaining live Familiar terminal. Both the `--timeout` and
+`--auto-dismiss` options require the `--wait` option.
 
 ## Backend metadata
 
-tmux stores these pane options and marks `@familiar` last, after all other
+Tmux stores these pane options and marks `@familiar` last, after all other
 metadata is set:
 
 | Option | Value |

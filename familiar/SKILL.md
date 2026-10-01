@@ -65,13 +65,19 @@ completion in its terminal.
 
 ## After summoning
 
+Report the Familiar terminal ID and response path, then return control to the
+user. The Familiar works independently and announces completion in its terminal.
+Do not wait or send progress updates unless the user asks you to stay for its
+result, or its result is needed to complete your own assigned work.
+
 `<skill-dir>/scripts/status.sh` reports the current Familiar and delivery state.
-To wait, invoke `status.sh --wait` once with a 12-minute command timeout and
-wait quietly for its result. Add `--auto-dismiss` to close a remaining Familiar
+If waiting is needed, invoke `status.sh --wait` once with a 12-minute command
+timeout and wait quietly. Add `--auto-dismiss` to close a remaining Familiar
 terminal after the inspection interval. If the Familiar is still working when
 the wait ends, a further wait may be made. Do not poll in a loop.
 
-Send a follow-up with `<skill-dir>/scripts/message.sh --message 'text'`.
+Send a clarification or follow-up with
+`<skill-dir>/scripts/message.sh --message 'text'`.
 Dismiss the current Familiar with `<skill-dir>/scripts/dismiss.sh`.
 
 ## Terminal backend
