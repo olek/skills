@@ -44,7 +44,7 @@ test_familiar_status() {
   assert_contains "$status_output" 'Managed Familiar: status-delivered (codex, pane %4, response delivered)'
   assert_contains "$status_output" 'Managed Familiar: status-awaiting (claude, pane %5, awaiting response)'
   assert_contains "$status_output" 'Managed Familiar: status-invalid (claude, pane %7, response path invalid)'
-  assert_contains "$status_output" 'Managed Familiar: status-dead (codex, pane %8, ended without response)'
+  assert_contains "$status_output" 'Managed Familiar: status-dead (codex, pane %8, aborted without response)'
   assert_contains "$status_output" "  request: $status_home/summonings/$historical_timestamp-rq-$historical_name.md"
   assert_contains "$status_output" "  response: $historical_response"
   assert_not_contains "$status_output" 'other-summoner'

@@ -5,7 +5,7 @@ Codex, and Antigravity. Each skill has its own directory and `SKILL.md`.
 
 ## Skills
 
-- **[familiar](familiar/SKILL.md)**: Summon one interactive AI harness in a
+- **[familiar](familiar/README.md)**: Summon one interactive AI harness in a
   visible tmux pane for pairing and context offloading. The summoning agent and
   Familiar may use different harnesses and models. See the
   [design notes](familiar/DESIGN.md).

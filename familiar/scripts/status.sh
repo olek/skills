@@ -44,7 +44,7 @@ familiar_row_state() {
   if [[ -f $response ]]; then
     printf delivered
   elif [[ $closed == 1 ]]; then
-    printf ended
+    printf aborted
   elif [[ -e $response ]]; then
     printf invalid
   else
@@ -147,7 +147,7 @@ report_familiars() {
     IFS=$'\t' read -r request_file response_file <<< "$derived_paths"
     case "$row_state" in
       delivered) label='response delivered' ;;
-      ended) label='ended without response' ;;
+      aborted) label='aborted without response' ;;
       invalid) label='response path invalid' ;;
       awaiting) label='awaiting response' ;;
     esac
@@ -183,7 +183,7 @@ completion_state() {
     local row_state
     row_state=$(familiar_row_state "$familiar_timestamp" "$familiar_name" "$home" "$familiar_closed")
     case "$row_state" in
-      ended|invalid|invalid-metadata) has_failure=1 ;;
+      aborted|invalid|invalid-metadata) has_failure=1 ;;
       awaiting) has_pending_response=1 ;;
     esac
   done <<< "$familiars"

@@ -197,9 +197,9 @@ import iterm2, sys
 iterm2.set_test_variable(sys.argv[1], "user.familiar_exit", int(sys.argv[2]))
 PY
   output=$(run_iterm2 "$STATUS" 2>&1) || fail_test "$output"
-  assert_contains "$output" 'session target-A, ended without response'
+  assert_contains "$output" 'session target-A, aborted without response'
   output=$(run_iterm2 "$STATUS" --wait --timeout 0 2>&1) || fail_test "$output"
-  assert_contains "$output" 'session target-A, ended without response'
+  assert_contains "$output" 'session target-A, aborted without response'
   assert_not_contains "$output" 'Timed out'
   python3 - "$TEST_ROOT/iterm2.json" <<'PY'
 import json, sys
